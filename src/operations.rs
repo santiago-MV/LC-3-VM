@@ -52,7 +52,7 @@ fn sign_extend(value: u16, bit_count: u16) -> u16 {
 
 #[cfg(test)]
 mod test {
-    use crate::{Flags, Registers, State, MEM_MAX};
+    use crate::{Flags, MEM_MAX, Registers, State};
 
     use super::*;
 
@@ -100,7 +100,7 @@ mod test {
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
     #[test]
-    fn integration_test(){
+    fn integration_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
@@ -108,9 +108,8 @@ mod test {
         state.memory[50] = 25;
         state.registers[Registers::Rpc] = 10;
         load_indirect(0b1010_1010_0010_1000, &mut state); // Move the value from register 40 positions from PC to the register 5
-        assert_eq!(state.registers[Registers::Rr5],25);
-        add(0b0001_0101_0111_0010,&mut state); // Add -14 to register 5 and save it in register 2
-        assert_eq!(state.registers[Registers::Rr2],11);
-
+        assert_eq!(state.registers[Registers::Rr5], 25);
+        add(0b0001_0101_0111_0010, &mut state); // Add -14 to register 5 and save it in register 2
+        assert_eq!(state.registers[Registers::Rr2], 11);
     }
 }
