@@ -2,26 +2,15 @@ use crate::{Flags, Registers};
 
 pub fn add(value: u16, registers: &mut [u16; 10]) {
     let dr = (value >> 9) & 0x7;
-    print!("{} ", dr);
     let sr1 = (value >> 6) & 0x7;
-    print!("{} ", sr1);
     let mode = (value >> 5) & 0x1;
-    print!("{} ", mode);
     if mode == 1 {
         let imm5 = sign_extend((value) & 0x1F, 5);
         registers[dr as usize] = u16::wrapping_add(registers[sr1 as usize], imm5);
     } else {
         let sr2 = value & 0x7;
-        print!("{} ", sr2);
-        print!("{} ", registers[sr1 as usize]);
-        print!("{} ", registers[sr2 as usize]);
-        print!(
-            "{} ",
-            u16::wrapping_add(registers[sr1 as usize], registers[sr2 as usize])
-        );
         registers[dr as usize] =
             u16::wrapping_add(registers[sr1 as usize], registers[sr2 as usize]);
-        print!("{} ", registers[dr as usize]);
     }
     update_flags(dr, registers);
 }

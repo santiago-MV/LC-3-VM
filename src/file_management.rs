@@ -13,11 +13,6 @@ pub fn read_file_to_memory(string_path: &String, memory: &mut [u16]) {
         Ok(v) => v,
         Err(_) => todo!(),
     };
-    /*let read_amount = match reader.read(&mut buffer){
-        Ok(size) => size,
-        Err(_) => todo!(),
-    };*/
-    print!("{:?}", buffer);
     let origin = u16::from_be_bytes([buffer[0], buffer[1]]) as usize;
     let max_memory = memory.len() - origin;
     let mut buffer_offset = 2;
