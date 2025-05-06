@@ -98,14 +98,14 @@ impl From<u16> for Operations {
     }
 }
 
-struct State{
-    memory: [u16;MEM_MAX],
-    registers: [u16;Registers::Rcount as usize],
+struct State {
+    memory: [u16; MEM_MAX],
+    registers: [u16; Registers::Rcount as usize],
 }
 
 fn main() -> Result<(), String> {
     // Initialize empty memory and array with registers
-    let mut state = State{
+    let mut state = State {
         memory: [0_u16; MEM_MAX],
         registers: [0_u16; Registers::Rcount as usize],
     };
@@ -137,7 +137,7 @@ fn main() -> Result<(), String> {
             Operations::Str => todo!(), //store_register(instruction),
             Operations::Rti => todo!(),
             Operations::Not => todo!(), //not(instruction),
-            Operations::Ldi => load_indirect(instruction,&mut state),
+            Operations::Ldi => load_indirect(instruction, &mut state),
             Operations::Sti => todo!(), //store_indirect(instruction),
             Operations::Jmp => todo!(), //jump(instruction),
             Operations::Res => todo!(),

@@ -1,5 +1,5 @@
 use crate::{Flags, Registers, State};
-/// Binary add operation with 2 possible encodings 
+/// Binary add operation with 2 possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0001)|DR (3)|SR1 (3)|0|00|SR2 (3)|
 /// * Immediate mode:   |OP_Code (0001)|DR (3)|SR1 (3)|1| IMMR5 (5)|
@@ -21,11 +21,11 @@ pub(crate) fn add(value: u16, state: &mut State) {
 /// Load the data from a memory location into the destination register
 /// The number between the () indicates the amount of bits of that field or its value
 /// Instruction: | OP_Code (1010)| DR (3)| PCOffset9 (9)|
-pub(crate) fn load_indirect(value: u16,state: &mut State){
-    let dr = value >> 9 & 0x7;      // Take the 3 DR bits
-    let pc_offset = sign_extend(value & 0x1FF, 9);  // Take the 9 PCOffset bits and sign_extend them
+pub(crate) fn load_indirect(value: u16, state: &mut State) {
+    let dr = value >> 9 & 0x7; // Take the 3 DR bits
+    let pc_offset = sign_extend(value & 0x1FF, 9); // Take the 9 PCOffset bits and sign_extend them
     let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], pc_offset);
-    state.registers[dr as usize] = state.memory[ memory_index as usize];
+    state.registers[dr as usize] = state.memory[memory_index as usize];
     update_flags(dr, &mut state.registers);
 }
 
@@ -58,43 +58,43 @@ mod test {
 
     #[test]
     fn add_test_mode_0() {
-        let mut state  = State {
-            memory: [0;1<<16],
+        let mut state = State {
+            memory: [0; 1 << 16],
             registers: [0; 10],
         };
         add(0b0001_1110_0100_0001, &mut state);
         assert_eq!(state.registers[7], 0);
-        assert_eq!(state.registers[Registers::Rcond],Flags::Zro as u16);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Zro as u16);
         state.registers[1] = 2;
         add(0b0001_1110_0000_0001, &mut state);
         assert_eq!(state.registers[7], 2);
-        assert_eq!(state.registers[Registers::Rcond],Flags::Pos as u16);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
     #[test]
     fn add_test_mode_1() {
-        let mut state  = State {
-            memory: [0;1<<16],
+        let mut state = State {
+            memory: [0; 1 << 16],
             registers: [0; 10],
         };
         add(0b0001_1110_0110_0001, &mut state);
         assert_eq!(state.registers[7], 1);
-        assert_eq!(state.registers[Registers::Rcond],Flags::Pos as u16);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
         add(0b0001_1110_0011_1111, &mut state);
         assert_eq!(state.registers[7], 0xFFFF);
-        assert_eq!(state.registers[Registers::Rcond],Flags::Neg as u16);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
     }
     #[test]
-    fn load_indirect_test(){
-        let mut state  = State {
-            memory: [0;1<<16],
+    fn load_indirect_test() {
+        let mut state = State {
+            memory: [0; 1 << 16],
             registers: [0; 10],
         };
         state.memory[20] = 5;
         state.registers[Registers::Rpc] = 5;
-        load_indirect(0b1010_0100_0000_1111,&mut state);
-        assert_eq!(state.registers[Registers::Rr2],5);
+        load_indirect(0b1010_0100_0000_1111, &mut state);
+        assert_eq!(state.registers[Registers::Rr2], 5);
         state.registers[Registers::Rpc] = 25;
-        load_indirect(0b1010_0001_1111_1011,&mut state);
-        assert_eq!(state.registers[Registers::Rr0],5);
+        load_indirect(0b1010_0001_1111_1011, &mut state);
+        assert_eq!(state.registers[Registers::Rr0], 5);
     }
 }
