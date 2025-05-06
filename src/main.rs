@@ -127,12 +127,12 @@ fn main() -> Result<(), String> {
         state.registers[Registers::Rpc] += 1;
         let op_code = instruction >> 12;
         match Operations::from(op_code) {
-            Operations::Br => todo!(), //branch(instruction),
+            Operations::Br => conditional_branch(instruction, &mut state),
             Operations::Add => add(instruction, &mut state),
             Operations::Ld => todo!(),  //load(instruction),
             Operations::St => todo!(),  //store(instruction),
             Operations::Jsr => todo!(), //jump_register(instruction),
-            Operations::And => todo!(), //and(instruction),
+            Operations::And => and(instruction, &mut state),
             Operations::Ldr => todo!(), //load_register(instruction),
             Operations::Str => todo!(), //store_register(instruction),
             Operations::Rti => todo!(),
