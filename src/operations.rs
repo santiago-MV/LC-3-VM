@@ -1,3 +1,4 @@
+
 use crate::{Flags, Registers, State};
 /// Binary ADD operation with 2 possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
