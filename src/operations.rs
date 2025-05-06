@@ -52,15 +52,15 @@ fn sign_extend(value: u16, bit_count: u16) -> u16 {
 
 #[cfg(test)]
 mod test {
-    use crate::{Flags, Registers, State};
+    use crate::{Flags, Registers, State, MEM_MAX};
 
     use super::*;
 
     #[test]
     fn add_test_mode_0() {
         let mut state = State {
-            memory: [0; 1 << 16],
-            registers: [0; 10],
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
         };
         add(0b0001_1110_0100_0001, &mut state);
         assert_eq!(state.registers[7], 0);
@@ -73,8 +73,8 @@ mod test {
     #[test]
     fn add_test_mode_1() {
         let mut state = State {
-            memory: [0; 1 << 16],
-            registers: [0; 10],
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
         };
         add(0b0001_1110_0110_0001, &mut state);
         assert_eq!(state.registers[7], 1);
@@ -86,15 +86,31 @@ mod test {
     #[test]
     fn load_indirect_test() {
         let mut state = State {
-            memory: [0; 1 << 16],
+            memory: [0; MEM_MAX],
             registers: [0; 10],
         };
         state.memory[20] = 5;
         state.registers[Registers::Rpc] = 5;
         load_indirect(0b1010_0100_0000_1111, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 5);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
         state.registers[Registers::Rpc] = 25;
         load_indirect(0b1010_0001_1111_1011, &mut state);
         assert_eq!(state.registers[Registers::Rr0], 5);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
+    }
+    #[test]
+    fn integration_test(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.memory[50] = 25;
+        state.registers[Registers::Rpc] = 10;
+        load_indirect(0b1010_1010_0010_1000, &mut state); // Move the value from register 40 positions from PC to the register 5
+        assert_eq!(state.registers[Registers::Rr5],25);
+        add(0b0001_0101_0111_0010,&mut state); // Add -14 to register 5 and save it in register 2
+        assert_eq!(state.registers[Registers::Rr2],11);
+
     }
 }
