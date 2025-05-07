@@ -138,6 +138,16 @@ pub(crate) fn load_effective_address(instruction: u16, state: &mut State) {
     update_flags(destination_register, &mut state.registers);
 }
 
+/// Calculate the bitwise complement of the source registry and save it in the destination registry
+/// * Instruction: |OP_Code (1001)|DR (3)|SR (3)|1|11111|<br>
+///   When finished update flags
+pub(crate) fn not(instruction: u16,state: &mut State){
+    let source_registry = Registers::from((instruction>>6) & 0x7);
+    let destination_registry = Registers::from((instruction>>9) & 0x7);
+    state.registers[destination_registry] = !(state.registers[source_registry]);
+    update_flags(destination_registry, &mut state.registers);
+}   
+
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
@@ -329,6 +339,21 @@ mod test {
     }
 
     #[test]
+    fn not_test(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.registers[Registers::Rr5] = 0x00FF;
+        not(0x977F,&mut state);
+        assert_eq!(state.registers[Registers::Rr3], 0xFF00);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
+        not(0x96FF,&mut state);
+        assert_eq!(state.registers[Registers::Rr3], 0xFF);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
+    }
+
+    #[test]
     fn integration_test() {
         // Initializate values
         let mut state = State {
@@ -369,5 +394,9 @@ mod test {
         // ADD 30 to the PC and save it in register 0
         load_effective_address(0xE21E, &mut state);
         assert_eq!(state.registers[Registers::Rr1], 50);
+        // Doing a not in register 3
+        not(0x96FF,&mut state);
+        assert_eq!(state.registers[Registers::Rr3],0xFCF6);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
     }
 }
