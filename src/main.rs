@@ -131,7 +131,7 @@ fn main() -> Result<(), String> {
             Operations::Add => add(instruction, &mut state),
             Operations::Ld => todo!(),  //load(instruction),
             Operations::St => todo!(),  //store(instruction),
-            Operations::Jsr => todo!(), //jump_register(instruction),
+            Operations::Jsr => jump_to_subrutine(instruction, &mut state),
             Operations::And => and(instruction, &mut state),
             Operations::Ldr => todo!(), //load_register(instruction),
             Operations::Str => todo!(), //store_register(instruction),

@@ -83,6 +83,22 @@ pub(crate) fn jump(instruction: u16, state: &mut State){
     state.registers[Registers::Rpc] = state.registers[base_register];
 }
 
+/// Save the value of the program counter in register 7 and increment the program counter
+/// by an singn extended offset or set its value to the one in the base register
+/// * Immediate mode (JSR):    |OP_Code (0100)|1 (Mode)|PCOffset (11)|
+/// * Register mode (JSRR):    |OP_Code (0100)|0 (Mode)|00|BaseR (3)|000000|
+pub(crate) fn jump_to_subrutine(instruction: u16,state: &mut State){
+    state.registers[Registers::Rr7] = state.registers[Registers::Rpc];
+    let mode = (instruction >> 11) & 1;
+    if mode == 1{
+        let offset = sign_extend(instruction & 0x7FF,11);
+        state.registers[Registers::Rpc] = u16::wrapping_add(state.registers[Registers::Rpc], offset);
+    }
+    else {
+        let base_register = Registers::from((instruction >> 6) & 0x7);
+        state.registers[Registers::Rpc]  = state.registers[base_register];
+    }
+}
 
 fn update_flags(register: u16, registers: &mut [u16; 10]) {
     if registers[Registers::from(register)] == 0 {
@@ -117,11 +133,11 @@ mod test {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
-        add(0b0001_1110_0100_0001, &mut state);
+        add(0x1E41, &mut state);
         assert_eq!(state.registers[7], 0);
         assert_eq!(state.registers[Registers::Rcond], Flags::Zro as u16);
         state.registers[1] = 2;
-        add(0b0001_1110_0000_0001, &mut state);
+        add(0x1E01, &mut state);
         assert_eq!(state.registers[7], 2);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
@@ -131,10 +147,10 @@ mod test {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
-        add(0b0001_1110_0110_0001, &mut state);
+        add(0x1E61, &mut state);
         assert_eq!(state.registers[7], 1);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
-        add(0b0001_1110_0011_1111, &mut state);
+        add(0x1E3F, &mut state);
         assert_eq!(state.registers[7], 0xFFFF);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
     }
@@ -146,11 +162,11 @@ mod test {
         };
         state.memory[20] = 5;
         state.registers[Registers::Rpc] = 5;
-        load_indirect(0b1010_0100_0000_1111, &mut state);
+        load_indirect(0xA40F, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 5);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
         state.registers[Registers::Rpc] = 25;
-        load_indirect(0b1010_0001_1111_1011, &mut state);
+        load_indirect(0xA1FB, &mut state);
         assert_eq!(state.registers[Registers::Rr0], 5);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
@@ -163,7 +179,7 @@ mod test {
         };
         state.registers[Registers::Rr5] = 0xFFFF;
         state.registers[Registers::Rr6] = 0x000F;
-        and(0b0101_1111_0100_0110, &mut state);
+        and(0x5F46, &mut state);
         assert_eq!(state.registers[Registers::Rr7], 0x000F);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
@@ -175,10 +191,10 @@ mod test {
             registers: [0; Registers::Rcount as usize],
         };
         state.registers[Registers::Rr5] = 0xFFFF;
-        and(0b0101_1111_0110_0110, &mut state);
+        and(0x5F66, &mut state);
         assert_eq!(state.registers[Registers::Rr7], 0x0006);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
-        and(0b0101_1111_0111_0110, &mut state);
+        and(0x5F76, &mut state);
         assert_eq!(state.registers[Registers::Rr7], 0xFFF6);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
     }
@@ -190,21 +206,21 @@ mod test {
             registers: [0; Registers::Rcount as usize],
         };
         state.registers[Registers::Rcond] = Flags::Neg as u16; // Flag Neg = 1
-        conditional_branch(0b0000_1000_0000_0101, &mut state); // Test Flag Neg
-        conditional_branch(0b0000_0100_0000_0101, &mut state); // Test Flag Zero
-        conditional_branch(0b0000_0010_0000_0101, &mut state); // Test Flag Pos
+        conditional_branch(0x805, &mut state); // Test Flag Neg
+        conditional_branch(0x405, &mut state); // Test Flag Zero
+        conditional_branch(0x205, &mut state); // Test Flag Pos
         assert_eq!(state.registers[Registers::Rpc], 5);
         state.registers[Registers::Rcond] = Flags::Zro as u16; // Flag Zro = 1
-        conditional_branch(0b0000_1000_0000_0101, &mut state); // Test Flag Neg
-        conditional_branch(0b0000_0100_0000_0101, &mut state); // Test Flag Zero
-        conditional_branch(0b0000_0010_0000_0101, &mut state); // Test Flag Pos
+        conditional_branch(0x805, &mut state); // Test Flag Neg
+        conditional_branch(0x405, &mut state); // Test Flag Zero
+        conditional_branch(0x205, &mut state); // Test Flag Pos
         assert_eq!(state.registers[Registers::Rpc], 10);
         state.registers[Registers::Rcond] = Flags::Pos as u16; // Flag Pos = 1
-        conditional_branch(0b0000_1000_0000_0101, &mut state); // Test Flag Neg
-        conditional_branch(0b0000_0100_0000_0101, &mut state); // Test Flag Zero
-        conditional_branch(0b0000_0010_0000_0101, &mut state); // Test Flag Pos
+        conditional_branch(0x805, &mut state); // Test Flag Neg
+        conditional_branch(0x405, &mut state); // Test Flag Zero
+        conditional_branch(0x205, &mut state); // Test Flag Pos
         assert_eq!(state.registers[Registers::Rpc], 15);
-        conditional_branch(0b0000_1111_1111_1011, &mut state); // Add -5 if any of the flags is active
+        conditional_branch(0xFFB, &mut state); // Add -5 if any of the flags is active
         assert_eq!(state.registers[Registers::Rpc], 10);
     }
 
@@ -220,6 +236,22 @@ mod test {
     }
 
     #[test]
+    fn jump_to_subrutine_test(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.registers[Registers::Rpc] = 15;
+        jump_to_subrutine(0x4FFB, &mut state);
+        assert_eq!(state.registers[Registers::Rpc],10);
+        assert_eq!(state.registers[Registers::Rr7],15);
+        state.registers[Registers::Rr5] = 50;
+        jump_to_subrutine(0x4140, &mut state);
+        assert_eq!(state.registers[Registers::Rr7],10);
+        assert_eq!(state.registers[Registers::Rpc],50);
+    }
+
+    #[test]
     fn integration_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
@@ -227,16 +259,20 @@ mod test {
         };
         state.memory[50] = 25;
         state.registers[Registers::Rpc] = 10;
-        load_indirect(0b1010_1010_0010_1000, &mut state); // Move the value from register 40 positions from PC to the register 5
+        load_indirect(0xAA28, &mut state); // Move the value from register 40 positions from PC to the register 5
         assert_eq!(state.registers[Registers::Rr5], 25);
-        add(0b0001_0101_0111_0010, &mut state); // Add -14 to register 5 and save it in register 2
+        add(0x1572, &mut state); // Add -14 to register 5 and save it in register 2
         assert_eq!(state.registers[Registers::Rr2], 11);
-        and(0b_0101_0100_1011_0100, &mut state);
+        and(0x54B4, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 0x0000);
         assert_eq!(state.registers[Registers::Rcond], Flags::Zro as u16);
-        conditional_branch(0b0000_0100_0000_0101, &mut state);
+        conditional_branch(0x405, &mut state);
         assert_eq!(state.registers[Registers::Rpc], 15);
         jump(0xC140, &mut state);
         assert_eq!(state.registers[Registers::Rpc],25);
+        jump_to_subrutine(0x4FFB, &mut state);
+        assert_eq!(state.registers[Registers::Rr7],25);
+        assert_eq!(state.registers[Registers::Rpc],20);
+
     }
 }
