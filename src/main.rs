@@ -129,11 +129,11 @@ fn main() -> Result<(), String> {
         match Operations::from(op_code) {
             Operations::Br => conditional_branch(instruction, &mut state),
             Operations::Add => add(instruction, &mut state),
-            Operations::Ld => load(instruction,&mut state),
+            Operations::Ld => load(instruction, &mut state),
             Operations::St => todo!(), //store(instruction),
             Operations::Jsr => jump_to_subrutine(instruction, &mut state),
             Operations::And => and(instruction, &mut state),
-            Operations::Ldr => todo!(), 
+            Operations::Ldr => load_register(instruction, &mut state),
             Operations::Str => todo!(), //store_register(instruction),
             Operations::Rti => todo!(),
             Operations::Not => todo!(), //not(instruction),
@@ -141,7 +141,7 @@ fn main() -> Result<(), String> {
             Operations::Sti => todo!(), //store_indirect(instruction),
             Operations::Jmp => jump(instruction, &mut state),
             Operations::Res => todo!(),
-            Operations::Lea => todo!(), //load_effective_address(instruction),
+            Operations::Lea => load_effective_address(instruction, &mut state),
             Operations::Trap => todo!(), //execute_trap(instruction),
         }
     }

@@ -3,7 +3,7 @@ use crate::{Flags, Registers, State};
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0001)|DR (3)|SR1 (3)|0|00|SR2 (3)|
 /// * Immediate mode:   |OP_Code (0001)|DR (3)|SR1 (3)|1| IMMR5 (5)|<br>
-/// When finished update flags
+///   When finished update flags
 pub(crate) fn add(instruction: u16, state: &mut State) {
     // Shift right so that the 3 dr bits are in the less significant position, do an binary and operation with 3 ones (0x7) to take their value
     let destination_register = Registers::from((instruction >> 9) & 0x7);
@@ -25,7 +25,7 @@ pub(crate) fn add(instruction: u16, state: &mut State) {
 /// Load the data from a memory location into the destination register
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Instruction: | OP_Code (1010)| DR (3)| PCOffset9 (9)|<br>
-/// When finished update flags
+///   When finished update flags
 pub(crate) fn load_indirect(instruction: u16, state: &mut State) {
     let destination_register = Registers::from((instruction >> 9) & 0x7); // Take the 3 DR bits
     let pc_offset = sign_extend(instruction & 0x1FF, 9); // Take the 9 PCOffset bits and sign_extend them
@@ -37,7 +37,7 @@ pub(crate) fn load_indirect(instruction: u16, state: &mut State) {
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0101)|DR (3)|SR1 (3)|0|00|SR2 (3)|
 /// * Immediate mode:   |OP_Code (0101)|DR (3)|SR1 (3)|1| IMMR5 (5)|<br>
-/// When finished update flags
+///   When finished update flags
 pub(crate) fn and(instruction: u16, state: &mut State) {
     let destination_register = Registers::from((instruction >> 9) & 0x7);
     let source_register_1 = Registers::from((instruction >> 6) & 0x7);
@@ -55,7 +55,7 @@ pub(crate) fn and(instruction: u16, state: &mut State) {
 
 /// Conditional branch operator
 /// * Instruction: |OP_Code (0000)| n (1)| z (1)| p (1)| PCOffset9 (9)|<br>
-/// The three bits after the OP_Code set which flags will be tested
+///   The three bits after the OP_Code set which flags will be tested
 /// * n = 1 => The Neg flag is tested
 /// * z = 1 => The Zro flag is tested
 /// * p = 1 => The Pos flag is tested
@@ -103,7 +103,7 @@ pub(crate) fn jump_to_subrutine(instruction: u16, state: &mut State) {
 
 /// Read the value from the memory location at progam counter + sign extended offset and write it in the destination registry
 /// * Instruction: |OP_Code (0010)|DR (3)|PCOffset (9)|<br>
-/// When finished update flags
+///   When finished update flags
 pub(crate) fn load(instruction: u16, state: &mut State) {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
     let destination_register = Registers::from((instruction >> 9) & 0x7);
@@ -116,12 +116,25 @@ pub(crate) fn load(instruction: u16, state: &mut State) {
 /// Load a value from memory to the destination register. <br>
 /// The memory direction is given by the value inside the base register and the sign extended offset
 /// * Instruction: |OP_Code (0110)|DR (3)|BaseR (3)|Offset (6)|<br>
-pub(crate) fn load_register(instruction: u16,state: &mut State){
+///   When finished update flags
+pub(crate) fn load_register(instruction: u16, state: &mut State) {
     let sign_extended_offset = sign_extend(instruction & 0x3F, 6);
-    let base_register = Registers::from(instruction>>6 & 0x7);
-    let destination_register = Registers::from(instruction>>9 & 0x7);
-    let memory_index = u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
+    let base_register = Registers::from(instruction >> 6 & 0x7);
+    let destination_register = Registers::from(instruction >> 9 & 0x7);
+    let memory_index =
+        u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
     state.registers[destination_register] = state.memory[memory_index];
+    update_flags(destination_register, &mut state.registers);
+}
+
+/// Load a memory address into a register
+/// * Instruction: |OP_Code (1110)|DR (3)|Offset (9)|<br>
+///   When finished update flags
+pub(crate) fn load_effective_address(instruction: u16, state: &mut State) {
+    let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
+    let destination_register = Registers::from((instruction >> 9) & 0x7);
+    let address = u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset);
+    state.registers[destination_register] = address;
     update_flags(destination_register, &mut state.registers);
 }
 
@@ -166,6 +179,7 @@ mod test {
         assert_eq!(state.registers[7], 2);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
+
     #[test]
     fn add_test_mode_1() {
         let mut state = State {
@@ -179,6 +193,7 @@ mod test {
         assert_eq!(state.registers[7], 0xFFFF);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
     }
+
     #[test]
     fn load_indirect_test() {
         let mut state = State {
@@ -290,7 +305,7 @@ mod test {
     }
 
     #[test]
-    fn load_register_test(){
+    fn load_register_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
@@ -298,8 +313,19 @@ mod test {
         state.memory[50] = 78;
         state.registers[Registers::Rr2] = 25;
         load_register(0x6A99, &mut state);
-        assert_eq!(state.registers[Registers::Rr5],78);
-        assert_eq!(state.registers[Registers::Rcond],Flags::Pos as u16);
+        assert_eq!(state.registers[Registers::Rr5], 78);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
+    }
+
+    #[test]
+    fn load_effective_address_test() {
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.registers[Registers::Rpc] = 15;
+        load_effective_address(0xE21F, &mut state);
+        assert_eq!(state.registers[Registers::Rr1], 46);
     }
 
     #[test]
@@ -318,7 +344,7 @@ mod test {
         load_indirect(0xAA28, &mut state);
         assert_eq!(state.registers[Registers::Rr5], 25);
         // Take the value from register 5, add -14 to it and save it in register 2
-        add(0x1572, &mut state); 
+        add(0x1572, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 11);
         // Make an and operation that will clear the value in register 2
         and(0x54B4, &mut state);
@@ -339,6 +365,9 @@ mod test {
         assert_eq!(state.registers[Registers::Rr2], 50);
         // Load from register 2 with an offset of 15 to register 3
         load_register(0x668f, &mut state);
-        assert_eq!(state.registers[Registers::Rr3],777);
+        assert_eq!(state.registers[Registers::Rr3], 777);
+        // ADD 30 to the PC and save it in register 0
+        load_effective_address(0xE21E, &mut state);
+        assert_eq!(state.registers[Registers::Rr1], 50);
     }
 }
