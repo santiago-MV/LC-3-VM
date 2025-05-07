@@ -1,6 +1,6 @@
+use operations::*;
 use std::env;
 use std::ops::{Index, IndexMut};
-use operations::*;
 pub mod file_management;
 mod operations;
 mod tests;
@@ -131,17 +131,17 @@ fn main() -> Result<(), String> {
             Operations::Br => conditional_branch(instruction, &mut state),
             Operations::Add => add(instruction, &mut state),
             Operations::Ld => load(instruction, &mut state),
-            Operations::St => store(instruction,&mut state),
+            Operations::St => store(instruction, &mut state),
             Operations::Jsr => jump_to_subrutine(instruction, &mut state),
             Operations::And => and(instruction, &mut state),
             Operations::Ldr => load_register(instruction, &mut state),
-            Operations::Str => store_register(instruction,&mut state),
-            Operations::Rti => todo!(), 
-            Operations::Not => not(instruction,&mut state),
+            Operations::Str => store_register(instruction, &mut state),
+            Operations::Rti => todo!(),
+            Operations::Not => not(instruction, &mut state),
             Operations::Ldi => load_indirect(instruction, &mut state),
-            Operations::Sti => store_indirect(instruction,&mut state),
+            Operations::Sti => store_indirect(instruction, &mut state),
             Operations::Jmp => jump(instruction, &mut state),
-            Operations::Res => todo!(), 
+            Operations::Res => todo!(),
             Operations::Lea => load_effective_address(instruction, &mut state),
             Operations::Trap => todo!(), //execute_trap(instruction),
         }

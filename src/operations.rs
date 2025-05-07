@@ -1,4 +1,4 @@
-use crate::{Flags, Registers, State,};
+use crate::{Flags, Registers, State};
 
 /// Binary ADD operation with 2 possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
@@ -142,37 +142,40 @@ pub(crate) fn load_effective_address(instruction: u16, state: &mut State) {
 /// Calculate the bitwise complement of the source registry and save it in the destination registry
 /// * Instruction: |OP_Code (1001)|DR (3)|SR (3)|1|11111|<br>
 ///   When finished update flags
-pub(crate) fn not(instruction: u16,state: &mut State){
-    let source_registry = Registers::from((instruction>>6) & 0x7);
-    let destination_registry = Registers::from((instruction>>9) & 0x7);
+pub(crate) fn not(instruction: u16, state: &mut State) {
+    let source_registry = Registers::from((instruction >> 6) & 0x7);
+    let destination_registry = Registers::from((instruction >> 9) & 0x7);
     state.registers[destination_registry] = !(state.registers[source_registry]);
     update_flags(destination_registry, &mut state.registers);
-}   
+}
 
 /// Store the contents of a source register into a specific location in memory
 /// * Instruction: |OP_Code (0011)|SR (3)|PCOffset (9)|<br>
-pub(crate) fn store(instruction: u16,state: &mut State){
+pub(crate) fn store(instruction: u16, state: &mut State) {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
     let source_register = Registers::from((instruction >> 9) & 0x7);
-    let memory_address = u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
+    let memory_address =
+        u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
     state.memory[memory_address] = state.registers[source_register];
 }
 
 /// The instruction receives the address where the memory address for storing the value is located, it reads it and saves the register value in it
 /// * Instruction: |OP_Code (1011)|SR (3)|PCOffset (9)|<br>
-pub(crate) fn store_indirect(instruction: u16,state: &mut State){
+pub(crate) fn store_indirect(instruction: u16, state: &mut State) {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
     let source_register = Registers::from((instruction >> 9) & 0x7);
-    let memory_address = u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
+    let memory_address =
+        u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
     state.memory[state.memory[memory_address] as usize] = state.registers[source_register];
 }
 /// Store the register in memory, the address is calculated using the base register's content and a sign extended offset
 /// * Instruction: |OP_Code (0111)|SR (3)|BaseR (3)|Offset (6)|<br>
-pub(crate) fn store_register(instruction: u16,state: &mut State){
+pub(crate) fn store_register(instruction: u16, state: &mut State) {
     let sign_extended_offset = sign_extend(instruction & 0x3F, 6);
     let base_register = Registers::from(instruction >> 6 & 0x7);
     let source_register = Registers::from(instruction >> 9 & 0x7);
-    let memory_address = u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
+    let memory_address =
+        u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
     state.memory[memory_address] = state.registers[source_register];
 }
 

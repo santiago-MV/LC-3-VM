@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub mod tests{
+pub mod tests {
     use crate::*;
     #[test]
     fn add_test_mode_0() {
@@ -15,7 +15,7 @@ pub mod tests{
         assert_eq!(state.registers[7], 2);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
-    
+
     #[test]
     fn add_test_mode_1() {
         let mut state = State {
@@ -29,7 +29,7 @@ pub mod tests{
         assert_eq!(state.registers[7], 0xFFFF);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
     }
-    
+
     #[test]
     fn load_indirect_test() {
         let mut state = State {
@@ -47,7 +47,7 @@ pub mod tests{
         assert_eq!(state.registers[Registers::Rr0], 5);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
-    
+
     #[test]
     fn and_test_mode_0() {
         let mut state = State {
@@ -60,7 +60,7 @@ pub mod tests{
         assert_eq!(state.registers[Registers::Rr7], 0x000F);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
-    
+
     #[test]
     fn and_test_mode_1() {
         let mut state = State {
@@ -75,7 +75,7 @@ pub mod tests{
         assert_eq!(state.registers[Registers::Rr7], 0xFFF6);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
     }
-    
+
     #[test]
     fn conditional_branch_test() {
         let mut state = State {
@@ -100,7 +100,7 @@ pub mod tests{
         conditional_branch(0xFFB, &mut state); // Add -5 if any of the flags is active
         assert_eq!(state.registers[Registers::Rpc], 10);
     }
-    
+
     #[test]
     fn jump_test() {
         let mut state = State {
@@ -111,7 +111,7 @@ pub mod tests{
         jump(0xC140, &mut state);
         assert_eq!(state.registers[Registers::Rpc], 25);
     }
-    
+
     #[test]
     fn jump_to_subrutine_test() {
         let mut state = State {
@@ -127,7 +127,7 @@ pub mod tests{
         assert_eq!(state.registers[Registers::Rr7], 10);
         assert_eq!(state.registers[Registers::Rpc], 50);
     }
-    
+
     #[test]
     fn load_test() {
         let mut state = State {
@@ -139,7 +139,7 @@ pub mod tests{
         assert_eq!(state.registers[Registers::Rr7], 70);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
-    
+
     #[test]
     fn load_register_test() {
         let mut state = State {
@@ -152,7 +152,7 @@ pub mod tests{
         assert_eq!(state.registers[Registers::Rr5], 78);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
-    
+
     #[test]
     fn load_effective_address_test() {
         let mut state = State {
@@ -163,24 +163,24 @@ pub mod tests{
         load_effective_address(0xE21F, &mut state);
         assert_eq!(state.registers[Registers::Rr1], 46);
     }
-    
+
     #[test]
-    fn not_test(){
+    fn not_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
         state.registers[Registers::Rr5] = 0x00FF;
-        not(0x977F,&mut state);
+        not(0x977F, &mut state);
         assert_eq!(state.registers[Registers::Rr3], 0xFF00);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
-        not(0x96FF,&mut state);
+        not(0x96FF, &mut state);
         assert_eq!(state.registers[Registers::Rr3], 0xFF);
         assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
     }
-    
+
     #[test]
-    fn store_test(){
+    fn store_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
@@ -189,9 +189,9 @@ pub mod tests{
         store(0x3819, &mut state);
         assert_eq!(state.memory[25], 777);
     }
-    
+
     #[test]
-    fn store_indirect_test(){
+    fn store_indirect_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
@@ -201,9 +201,9 @@ pub mod tests{
         store_indirect(0x3819, &mut state);
         assert_eq!(state.memory[50], 777);
     }
-    
+
     #[test]
-    fn store_register_test(){
+    fn store_register_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
@@ -211,7 +211,7 @@ pub mod tests{
         state.registers[Registers::Rr4] = 20;
         state.registers[Registers::Rr5] = 50;
         store_register(0x7B3B, &mut state);
-        assert_eq!(state.memory[15],50);
+        assert_eq!(state.memory[15], 50);
     }
 
     #[test]
@@ -256,18 +256,17 @@ pub mod tests{
         load_effective_address(0xE21E, &mut state);
         assert_eq!(state.registers[Registers::Rr1], 50);
         // Doing a not in register 3, PC = 20
-        not(0x96FF,&mut state);
-        assert_eq!(state.registers[Registers::Rr3],0xFCF6);
+        not(0x96FF, &mut state);
+        assert_eq!(state.registers[Registers::Rr3], 0xFCF6);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
         // Save the value from register 3 in memory with an offset of 25, PC = 20
-        store(0x3619,&mut state);
-        assert_eq!(state.memory[45],0xFCF6);
+        store(0x3619, &mut state);
+        assert_eq!(state.memory[45], 0xFCF6);
         // Indirect storage of the value of register 1, PC = 20
         store_indirect(0xB21E, &mut state);
-        assert_eq!(state.memory[25689],50);
+        assert_eq!(state.memory[25689], 50);
         // Store the value of Rr3 using store register from R1
         store_register(0x767B, &mut state);
-        assert_eq!(state.memory[45],0xFCF6);
+        assert_eq!(state.memory[45], 0xFCF6);
     }
-    
 }
