@@ -1,4 +1,5 @@
 use operations::*;
+use core::panic;
 use std::env;
 use std::ops::{Index, IndexMut};
 pub mod file_management;
@@ -102,28 +103,30 @@ impl From<u16> for Operations {
 struct State {
     memory: [u16; MEM_MAX],
     registers: [u16; Registers::Rcount as usize],
+    running: bool,
 }
 
-fn main() -> Result<(), String> {
+fn main(){
     // Initialize empty memory and array with registers
     let mut state = State {
         memory: [0_u16; MEM_MAX],
         registers: [0_u16; Registers::Rcount as usize],
+        running: true
     };
     // Read file
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        return Err("No files were entered".to_string());
+        panic!("No files were entered");
     }
     let paths = &args[1..].to_vec();
     for p in paths {
         file_management::read_file_to_memory(p, &mut state.memory);
     }
-
     state.registers[Registers::Rpc] = PC_START;
     state.registers[Registers::Rcond] = Flags::Zro as u16;
-    loop {
+    while state.running {
         // Get next instruction from memory, increment the PC by one and get the OP_CODE
+        state.memory[state.registers[Registers::Rpc] as usize]= 0xF023;
         let instruction = state.memory[state.registers[Registers::Rpc] as usize];
         state.registers[Registers::Rpc] += 1;
         let op_code = instruction >> 12;
@@ -143,7 +146,7 @@ fn main() -> Result<(), String> {
             Operations::Jmp => jump(instruction, &mut state),
             Operations::Res => todo!(),
             Operations::Lea => load_effective_address(instruction, &mut state),
-            Operations::Trap => todo!(), //execute_trap(instruction),
+            Operations::Trap => trap(instruction,&mut state),
         }
     }
 }

@@ -1,5 +1,29 @@
-use crate::{Flags, Registers, State};
+use std::{char, io::{stdin, Read}};
 
+use crate::{Flags, Registers, State};
+/// Traps are predefined routines, each trap in the enum represents a routine
+enum Traps{
+    Getc = 0x20,
+    Out = 0x21,
+    Puts = 0x22,
+    In = 0x23,
+    Putsp = 0x24,
+    Halt = 0x25,
+}
+
+impl From<u16> for Traps {
+    fn from(value: u16) -> Self {
+        match value {
+            0x20 => Traps::Getc,
+            0x21 => Traps::Out,
+            0x22 => Traps::Puts,
+            0x23 => Traps::In,
+            0x24 => Traps::Putsp,
+            0x25 => Traps::Halt,
+            _ => todo!(),
+        }
+    }
+}
 /// Binary ADD operation with 2 possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0001)|DR (3)|SR1 (3)|0|00|SR2 (3)|
@@ -179,6 +203,83 @@ pub(crate) fn store_register(instruction: u16, state: &mut State) {
     state.memory[memory_address] = state.registers[source_register];
 }
 
+/// Given a trap instruction call the correct routine
+/// * Instruction: |OP_Code (1111)|0000|TrapVect (8)|<br>
+pub(crate) fn trap(instruction: u16, state: &mut State){
+    let routine = Traps::from(instruction & 0xFF);
+    match routine {
+        Traps::Getc => trap_routine_getc(state),
+        Traps::Out => trap_routine_out(state),
+        Traps::Puts => trap_routine_put(state),
+        Traps::In => trap_routine_in(state),
+        Traps::Putsp => trap_routine_puts(state),
+        Traps::Halt => trap_routine_halt(state),
+    }
+}
+
+/// Stops running the program
+fn trap_routine_halt(state: &mut State){
+    print!("HALT");
+    state.running = false;
+}
+
+/// Output a string in big endian
+fn trap_routine_puts(state: &State){
+    let mut address = state.registers[Registers::Rr0] as usize;
+    let mut character = state.memory[address];
+    while character != 0x0000 {
+        let char1 = character & 0xFF;
+        print!("{}",char::from_u32(char1 as u32).unwrap());
+        let char2 = character >> 8;
+        if char2 != 0x0{
+            print!("{}",char::from_u32(char2 as u32).unwrap());
+        }
+        // Fetch next character
+        address += 1;
+        character = state.memory[address];
+    }
+}
+
+/// Prompt for input character
+fn trap_routine_in(state: &mut State){
+    print!("Enter character: ");
+    let input = 0_u8;
+    match stdin().read_exact(&mut [input]){
+        Ok(_) => print!("{}",input), 
+        Err(_) => todo!(),
+    };
+    state.registers[Registers::Rr0] = input as u16;
+    update_flags(Registers::Rr0, &mut state.registers);
+}
+
+/// Reads a character from register 0 and prints it
+fn trap_routine_out(state: &State){
+    let character = state.registers[Registers::Rr0];
+    print!("{}",char::from_u32(character as u32).unwrap());
+}
+
+/// Reads a single character from the keyboard and save it in the Register 0
+fn trap_routine_getc(state: &mut State){
+    let input = 0_u8;
+    match stdin().read_exact(&mut [input]){
+        Ok(_) => state.registers[Registers::Rr0] = input as u16, // Is this ok?
+        Err(_) => todo!(),
+    };
+    update_flags(Registers::Rr0, &mut state.registers);
+}
+
+/// Reads chars from memory, each char uses one memory space, and print it
+fn trap_routine_put(state: &State){
+    let mut address = state.registers[Registers::Rr0] as usize;
+    let mut character = state.memory[address];
+    while character != 0x0000 {
+        print!("{}",char::from_u32(character as u32).unwrap());
+        // Fetch next character
+        address += 1;
+        character = state.memory[address];
+    }
+}
+
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
@@ -199,3 +300,35 @@ fn sign_extend(value: u16, bit_count: u16) -> u16 {
     }
     x
 }
+
+#[cfg(test)]
+mod test{
+    use crate::*;
+    use super::*;
+
+    #[test]
+    fn test_put(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+            running:true,
+        };
+        state.registers[Registers::Rr0] = 50;
+        state.memory[50] = 0x48;
+        state.memory[51] = 0x6F;
+        state.memory[52] = 0x6C;
+        state.memory[53] = 0x61;
+        state.memory[54] = 0x21;
+        trap_routine_put(&state);
+    }
+    #[test]
+    fn test_getc(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+            running:true,
+        };
+        trap_routine_in(&mut state);
+    }
+}
+
