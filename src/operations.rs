@@ -76,6 +76,14 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
     }
 }
 
+/// Set the program counter to the value of the base register
+/// Instruction: |OP_Code (1100)|000| BaseR (3)|000000|
+pub(crate) fn jump(instruction: u16, state: &mut State){
+    let base_register = Registers::from((instruction >> 6) & 0x7);
+    state.registers[Registers::Rpc] = state.registers[base_register];
+}
+
+
 fn update_flags(register: u16, registers: &mut [u16; 10]) {
     if registers[Registers::from(register)] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
@@ -201,6 +209,17 @@ mod test {
     }
 
     #[test]
+    fn jump_test(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.registers[Registers::Rr5] = 25;
+        jump(0xC140, &mut state);
+        assert_eq!(state.registers[Registers::Rpc],25);
+    }
+
+    #[test]
     fn integration_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
@@ -217,5 +236,7 @@ mod test {
         assert_eq!(state.registers[Registers::Rcond], Flags::Zro as u16);
         conditional_branch(0b0000_0100_0000_0101, &mut state);
         assert_eq!(state.registers[Registers::Rpc], 15);
+        jump(0xC140, &mut state);
+        assert_eq!(state.registers[Registers::Rpc],25);
     }
 }
