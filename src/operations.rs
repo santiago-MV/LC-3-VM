@@ -159,7 +159,7 @@ pub(crate) fn store(instruction: u16, state: &mut State) {
     state.memory[memory_address] = state.registers[source_register];
 }
 
-/// The instruction receives the address where the memory address for storing the value is located, it reads it and saves the register value in it
+/// The instruction takes the memory address containing the memory location where the source register's value should be stored and stores it.
 /// * Instruction: |OP_Code (1011)|SR (3)|PCOffset (9)|<br>
 pub(crate) fn store_indirect(instruction: u16, state: &mut State) {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
