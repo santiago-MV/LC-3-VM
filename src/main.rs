@@ -5,7 +5,7 @@ pub mod operations;
 use operations::*;
 static MEM_MAX: usize = 1 << 16;
 static PC_START: u16 = 0x3000;
-
+#[derive(Clone, Copy)]
 enum Registers {
     Rr0,
     Rr1,

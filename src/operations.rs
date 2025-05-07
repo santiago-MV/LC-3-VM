@@ -2,58 +2,61 @@ use crate::{Flags, Registers, State};
 /// Binary ADD operation with 2 possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0001)|DR (3)|SR1 (3)|0|00|SR2 (3)|
-/// * Immediate mode:   |OP_Code (0001)|DR (3)|SR1 (3)|1| IMMR5 (5)|
+/// * Immediate mode:   |OP_Code (0001)|DR (3)|SR1 (3)|1| IMMR5 (5)|<br>
+/// When finished update flags
 pub(crate) fn add(instruction: u16, state: &mut State) {
     // Shift right so that the 3 dr bits are in the less significant position, do an binary and operation with 3 ones (0x7) to take their value
-    let destination_register = (instruction >> 9) & 0x7;
-    let source_register_1 = (instruction >> 6) & 0x7;
+    let destination_register = Registers::from((instruction >> 9) & 0x7);
+    let source_register_1 = Registers::from((instruction >> 6) & 0x7);
     let mode = (instruction >> 5) & 0x1;
     if mode == 1 {
         let value_to_add = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register as usize] =
-            u16::wrapping_add(state.registers[source_register_1 as usize], value_to_add);
+        state.registers[destination_register] =
+            u16::wrapping_add(state.registers[source_register_1], value_to_add);
     } else {
-        let source_register_2 = instruction & 0x7;
-        state.registers[destination_register as usize] = u16::wrapping_add(
-            state.registers[source_register_1 as usize],
-            state.registers[source_register_2 as usize],
+        let source_register_2 = Registers::from(instruction & 0x7);
+        state.registers[destination_register] = u16::wrapping_add(
+            state.registers[source_register_1],
+            state.registers[source_register_2],
         );
     }
     update_flags(destination_register, &mut state.registers);
 }
 /// Load the data from a memory location into the destination register
 /// The number between the () indicates the amount of bits of that field or its value
-/// Instruction: | OP_Code (1010)| DR (3)| PCOffset9 (9)|
+/// * Instruction: | OP_Code (1010)| DR (3)| PCOffset9 (9)|<br>
+/// When finished update flags
 pub(crate) fn load_indirect(instruction: u16, state: &mut State) {
-    let destination_register = instruction >> 9 & 0x7; // Take the 3 DR bits
+    let destination_register = Registers::from((instruction >> 9) & 0x7); // Take the 3 DR bits
     let pc_offset = sign_extend(instruction & 0x1FF, 9); // Take the 9 PCOffset bits and sign_extend them
-    let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], pc_offset);
-    state.registers[destination_register as usize] = state.memory[memory_index as usize];
+    let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], pc_offset) as usize;
+    state.registers[destination_register] = state.memory[state.memory[memory_index] as usize];
     update_flags(destination_register, &mut state.registers);
 }
 /// Binary AND operation with two possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0101)|DR (3)|SR1 (3)|0|00|SR2 (3)|
-/// * Immediate mode:   |OP_Code (0101)|DR (3)|SR1 (3)|1| IMMR5 (5)|
+/// * Immediate mode:   |OP_Code (0101)|DR (3)|SR1 (3)|1| IMMR5 (5)|<br>
+/// When finished update flags
 pub(crate) fn and(instruction: u16, state: &mut State) {
-    let destination_register = (instruction >> 9) & 0x7;
-    let source_register_1 = (instruction >> 6) & 0x7;
+    let destination_register = Registers::from((instruction >> 9) & 0x7);
+    let source_register_1 = Registers::from((instruction >> 6) & 0x7);
     let mode = (instruction >> 5) & 0x1;
     if mode == 1 {
         let value_to_and = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register as usize] =
-            state.registers[source_register_1 as usize] & value_to_and;
+        state.registers[destination_register] =
+            state.registers[source_register_1] & value_to_and;
     } else {
-        let source_register_2 = instruction & 0x7;
-        state.registers[destination_register as usize] = state.registers
-            [source_register_1 as usize]
-            & state.registers[source_register_2 as usize];
+        let source_register_2 = Registers::from(instruction & 0x7);
+        state.registers[destination_register] = state.registers
+            [source_register_1]
+            & state.registers[source_register_2];
     }
     update_flags(destination_register, &mut state.registers);
 }
 
 /// Conditional branch operator
-/// Instruction: |OP_Code (0000)| n (1)| z (1)| p (1)| PCOffset9 (9)|<br>
+/// * Instruction: |OP_Code (0000)| n (1)| z (1)| p (1)| PCOffset9 (9)|<br>
 /// The three bits after the OP_Code set which flags will be tested
 /// * n = 1 => The Neg flag is tested
 /// * z = 1 => The Zro flag is tested
@@ -77,7 +80,7 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
 }
 
 /// Set the program counter to the value of the base register
-/// Instruction: |OP_Code (1100)|000| BaseR (3)|000000|
+/// * Instruction: |OP_Code (1100)|000| BaseR (3)|000000|
 pub(crate) fn jump(instruction: u16, state: &mut State){
     let base_register = Registers::from((instruction >> 6) & 0x7);
     state.registers[Registers::Rpc] = state.registers[base_register];
@@ -100,12 +103,23 @@ pub(crate) fn jump_to_subrutine(instruction: u16,state: &mut State){
     }
 }
 
-fn update_flags(register: u16, registers: &mut [u16; 10]) {
-    if registers[Registers::from(register)] == 0 {
+/// Read the value from the memory location at progam counter + sign extended offset and write it in the destination registry
+/// * Instruction: |OP_Code (0010)|DR (3)|PCOffset (9)|<br>
+/// When finished update flags
+pub(crate) fn load(instruction: u16,state: &mut State){
+    let sign_extended_offset = sign_extend(instruction & 0x1FF,9);
+    let destination_register = Registers::from((instruction>>9)&0x7);
+    let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
+    state.registers[destination_register] = state.memory[memory_index];
+    update_flags(destination_register, &mut state.registers);
+}
+
+fn update_flags(register: Registers, registers: &mut [u16; 10]) {
+    if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
     }
     // If the left-most bit is a 1 then the number is negative
-    else if registers[Registers::from(register)] >> 15 == 1 {
+    else if registers[register] >> 15 == 1 {
         registers[Registers::Rcond] = Flags::Neg as u16;
     } else {
         registers[Registers::Rcond] = Flags::Pos as u16;
@@ -160,7 +174,8 @@ mod test {
             memory: [0; MEM_MAX],
             registers: [0; 10],
         };
-        state.memory[20] = 5;
+        state.memory[20] = 7890;
+        state.memory[7890] = 5;
         state.registers[Registers::Rpc] = 5;
         load_indirect(0xA40F, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 5);
@@ -252,14 +267,28 @@ mod test {
     }
 
     #[test]
+    fn load_test() {
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.memory[50] = 70;
+        load(0x2E32, &mut state);
+        assert_eq!(state.registers[Registers::Rr7],70);
+        assert_eq!(state.registers[Registers::Rcond],Flags::Pos as u16);
+    }
+
+    #[test]
     fn integration_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
-        state.memory[50] = 25;
+        state.memory[50] = 25689;
+        state.memory[25689] = 25;
+        state.memory[10] = 50;
         state.registers[Registers::Rpc] = 10;
-        load_indirect(0xAA28, &mut state); // Move the value from register 40 positions from PC to the register 5
+        load_indirect(0xAA28, &mut state); // Move the value from memory 40 positions from PC to the register 5
         assert_eq!(state.registers[Registers::Rr5], 25);
         add(0x1572, &mut state); // Add -14 to register 5 and save it in register 2
         assert_eq!(state.registers[Registers::Rr2], 11);
@@ -273,6 +302,7 @@ mod test {
         jump_to_subrutine(0x4FFB, &mut state);
         assert_eq!(state.registers[Registers::Rr7],25);
         assert_eq!(state.registers[Registers::Rpc],20);
-
+        load(0x25F6, &mut state);
+        assert_eq!(state.registers[Registers::Rr2],50);
     }
 }
