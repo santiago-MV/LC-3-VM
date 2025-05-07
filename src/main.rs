@@ -2,9 +2,10 @@ use std::env;
 use std::ops::{Index, IndexMut};
 pub mod file_management;
 pub mod operations;
+use operations::*;
 static MEM_MAX: usize = 1 << 16;
 static PC_START: u16 = 0x3000;
-
+#[derive(Clone, Copy)]
 enum Registers {
     Rr0,
     Rr1,
@@ -97,10 +98,17 @@ impl From<u16> for Operations {
     }
 }
 
+struct State {
+    memory: [u16; MEM_MAX],
+    registers: [u16; Registers::Rcount as usize],
+}
+
 fn main() -> Result<(), String> {
     // Initialize empty memory and array with registers
-    let mut memory = [0_u16; MEM_MAX];
-    let mut registers = [0_u16; Registers::Rcount as usize];
+    let mut state = State {
+        memory: [0_u16; MEM_MAX],
+        registers: [0_u16; Registers::Rcount as usize],
+    };
     // Read file
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -108,28 +116,28 @@ fn main() -> Result<(), String> {
     }
     let paths = &args[1..].to_vec();
     for p in paths {
-        file_management::read_file_to_memory(p, &mut memory);
+        file_management::read_file_to_memory(p, &mut state.memory);
     }
 
-    registers[Registers::Rpc] = PC_START;
-    registers[Registers::Rcond] = Flags::Zro as u16;
+    state.registers[Registers::Rpc] = PC_START;
+    state.registers[Registers::Rcond] = Flags::Zro as u16;
     loop {
         // Get next instruction from memory, increment the PC by one and get the OP_CODE
-        let instruction = memory[registers[Registers::Rpc] as usize];
-        registers[Registers::Rpc as usize] += 1;
+        let instruction = state.memory[state.registers[Registers::Rpc] as usize];
+        state.registers[Registers::Rpc] += 1;
         let op_code = instruction >> 12;
         match Operations::from(op_code) {
-            Operations::Br => todo!(), //branch(instruction),
-            Operations::Add => operations::add(instruction, &mut registers),
+            Operations::Br => conditional_branch(instruction, &mut state),
+            Operations::Add => add(instruction, &mut state),
             Operations::Ld => todo!(),  //load(instruction),
             Operations::St => todo!(),  //store(instruction),
             Operations::Jsr => todo!(), //jump_register(instruction),
-            Operations::And => todo!(), //and(instruction),
+            Operations::And => and(instruction, &mut state),
             Operations::Ldr => todo!(), //load_register(instruction),
             Operations::Str => todo!(), //store_register(instruction),
             Operations::Rti => todo!(),
             Operations::Not => todo!(), //not(instruction),
-            Operations::Ldi => todo!(), //load_indirect(instruction),
+            Operations::Ldi => load_indirect(instruction, &mut state),
             Operations::Sti => todo!(), //store_indirect(instruction),
             Operations::Jmp => todo!(), //jump(instruction),
             Operations::Res => todo!(),
