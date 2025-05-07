@@ -148,6 +148,15 @@ pub(crate) fn not(instruction: u16,state: &mut State){
     update_flags(destination_registry, &mut state.registers);
 }   
 
+/// Store the contents of a source register into a specific location in memory
+/// * Instruction: |OP_Code (0011)|SR (3)|PCOffset (9)|<br>
+pub(crate) fn store(instruction: u16,state: &mut State){
+    let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
+    let source_register = Registers::from((instruction >> 9) & 0x7);
+    let memory_address = u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
+    state.memory[memory_address] = state.registers[source_register];
+}
+
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
@@ -354,6 +363,17 @@ mod test {
     }
 
     #[test]
+    fn store_test(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.registers[Registers::Rr4] = 777;
+        store(0x3819, &mut state);
+        assert_eq!(state.memory[25], 777);
+    }
+
+    #[test]
     fn integration_test() {
         // Initializate values
         let mut state = State {
@@ -398,5 +418,8 @@ mod test {
         not(0x96FF,&mut state);
         assert_eq!(state.registers[Registers::Rr3],0xFCF6);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
+        // Save the value from register 3 in memory with an offset of 25
+        store(0x3619,&mut state);
+        assert_eq!(state.memory[45],0xFCF6);
     }
 }
