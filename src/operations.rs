@@ -76,7 +76,6 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
     }
 }
 
-
 /// Set the program counter to the value of the base register
 /// * Instruction: |OP_Code (1100)|000| BaseR (3)|000000|
 pub(crate) fn jump(instruction: u16, state: &mut State) {
@@ -137,7 +136,6 @@ pub(crate) fn load_effective_address(instruction: u16, state: &mut State) {
     state.registers[destination_register] = address;
     update_flags(destination_register, &mut state.registers);
 }
-
 
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
