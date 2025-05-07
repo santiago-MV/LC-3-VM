@@ -138,7 +138,7 @@ fn main() -> Result<(), String> {
             Operations::Rti => todo!(), 
             Operations::Not => not(instruction,&mut state),
             Operations::Ldi => load_indirect(instruction, &mut state),
-            Operations::Sti => todo!(), //store_indirect(instruction),
+            Operations::Sti => store_indirect(instruction,&mut state),
             Operations::Jmp => jump(instruction, &mut state),
             Operations::Res => todo!(), 
             Operations::Lea => load_effective_address(instruction, &mut state),

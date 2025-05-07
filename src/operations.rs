@@ -157,6 +157,15 @@ pub(crate) fn store(instruction: u16,state: &mut State){
     state.memory[memory_address] = state.registers[source_register];
 }
 
+/// The instruction receives the address where the memory address for storing the value is located, it reads it and saves the register value in it
+/// * Instruction: |OP_Code (1011)|SR (3)|PCOffset (9)|<br>
+pub(crate) fn store_indirect(instruction: u16,state: &mut State){
+    let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
+    let source_register = Registers::from((instruction >> 9) & 0x7);
+    let memory_address = u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
+    state.memory[state.memory[memory_address] as usize] = state.registers[source_register];
+}
+
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
@@ -374,6 +383,18 @@ mod test {
     }
 
     #[test]
+    fn store_indirect_test(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.memory[25] = 50;
+        state.registers[Registers::Rr4] = 777;
+        store_indirect(0x3819, &mut state);
+        assert_eq!(state.memory[50], 777);
+    }
+
+    #[test]
     fn integration_test() {
         // Initializate values
         let mut state = State {
@@ -405,21 +426,25 @@ mod test {
         jump_to_subrutine(0x4FFB, &mut state);
         assert_eq!(state.registers[Registers::Rr7], 25);
         assert_eq!(state.registers[Registers::Rpc], 20);
-        // Directly load a value from memory to register 2
+        // Directly load a value from memory to register 2, PC = 20
         load(0x25F6, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 50);
-        // Load from register 2 with an offset of 15 to register 3
+        // Load from register 2 with an offset of 15 to register 3, PC = 20
         load_register(0x668f, &mut state);
         assert_eq!(state.registers[Registers::Rr3], 777);
-        // ADD 30 to the PC and save it in register 0
+        // ADD 30 to the PC and save it in register 0, PC = 20
         load_effective_address(0xE21E, &mut state);
         assert_eq!(state.registers[Registers::Rr1], 50);
-        // Doing a not in register 3
+        // Doing a not in register 3, PC = 20
         not(0x96FF,&mut state);
         assert_eq!(state.registers[Registers::Rr3],0xFCF6);
         assert_eq!(state.registers[Registers::Rcond], Flags::Neg as u16);
-        // Save the value from register 3 in memory with an offset of 25
+        // Save the value from register 3 in memory with an offset of 25, PC = 20
         store(0x3619,&mut state);
         assert_eq!(state.memory[45],0xFCF6);
+        // Indirect storage of the value of register 1, PC = 20
+        store_indirect(0xB214, &mut state);
+        assert_eq!(state.memory[25689],50);
+
     }
 }
