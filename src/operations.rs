@@ -42,14 +42,13 @@ pub(crate) fn and(instruction: u16, state: &mut State) {
     let destination_register = Registers::from((instruction >> 9) & 0x7);
     let source_register_1 = Registers::from((instruction >> 6) & 0x7);
     let mode = (instruction >> 5) & 0x1;
-    if mode == 1 {
-        let value_to_and = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
+    let value_to_and = if mode == 1 {
+        sign_extend((instruction) & 0x1F, 5)
     } else {
         let source_register_2 = Registers::from(instruction & 0x7);
-        state.registers[destination_register] =
-            state.registers[source_register_1] & state.registers[source_register_2];
-    }
+        state.registers[source_register_2]
+    };
+    state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
     update_flags(destination_register, &mut state.registers);
 }
 
@@ -67,15 +66,16 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
     let zero_indicator = (instruction >> 10) & 1;
     let positive_indicator = (instruction >> 9) & 1;
     let current_flags = state.registers[Registers::Rcond];
-    if ((negative_indicator & current_flags >> 2) == 1)
-        || ((zero_indicator & current_flags >> 1) == 1)
-        || ((positive_indicator & current_flags) == 1)
-    {
+    let is_negative = (negative_indicator & current_flags >> 2) == 1;
+    let is_zero = (zero_indicator & current_flags >> 1) == 1;
+    let is_positive = (positive_indicator & current_flags) == 1;
+    if is_negative || is_zero || is_positive {
         let pc_offset = sign_extend(instruction & 0x1FF, 9);
         state.registers[Registers::Rpc] =
             u16::wrapping_add(state.registers[Registers::Rpc], pc_offset)
     }
 }
+
 
 /// Set the program counter to the value of the base register
 /// * Instruction: |OP_Code (1100)|000| BaseR (3)|000000|
@@ -137,6 +137,7 @@ pub(crate) fn load_effective_address(instruction: u16, state: &mut State) {
     state.registers[destination_register] = address;
     update_flags(destination_register, &mut state.registers);
 }
+
 
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
@@ -200,8 +201,10 @@ mod test {
             memory: [0; MEM_MAX],
             registers: [0; 10],
         };
+
         state.memory[20] = 7890;
         state.memory[7890] = 5;
+
         state.registers[Registers::Rpc] = 5;
         load_indirect(0xA40F, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 5);
@@ -335,10 +338,12 @@ mod test {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
+
         state.memory[50] = 25689;
         state.memory[25689] = 25;
         state.memory[65] = 777;
         state.memory[10] = 50;
+
         state.registers[Registers::Rpc] = 10;
         // Indirectly insert a value in register 5
         load_indirect(0xAA28, &mut state);
