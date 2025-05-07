@@ -5,18 +5,18 @@ use crate::{Flags, Registers, State};
 /// * Immediate mode:   |OP_Code (0001)|DR (3)|SR1 (3)|1| IMMR5 (5)|
 pub(crate) fn add(instruction: u16, state: &mut State) {
     // Shift right so that the 3 dr bits are in the less significant position, do an binary and operation with 3 ones (0x7) to take their value
-    let destination_register = (instruction >> 9) & 0x7;
-    let source_register_1 = (instruction >> 6) & 0x7;
+    let destination_register = Registers::from((instruction >> 9) & 0x7);
+    let source_register_1 = Registers::from((instruction >> 6) & 0x7);
     let mode = (instruction >> 5) & 0x1;
     if mode == 1 {
         let value_to_add = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register as usize] =
-            u16::wrapping_add(state.registers[source_register_1 as usize], value_to_add);
+        state.registers[destination_register] =
+            u16::wrapping_add(state.registers[source_register_1], value_to_add);
     } else {
-        let source_register_2 = instruction & 0x7;
-        state.registers[destination_register as usize] = u16::wrapping_add(
-            state.registers[source_register_1 as usize],
-            state.registers[source_register_2 as usize],
+        let source_register_2 = Registers::from(instruction & 0x7);
+        state.registers[destination_register] = u16::wrapping_add(
+            state.registers[source_register_1],
+            state.registers[source_register_2],
         );
     }
     update_flags(destination_register, &mut state.registers);
@@ -25,10 +25,10 @@ pub(crate) fn add(instruction: u16, state: &mut State) {
 /// The number between the () indicates the amount of bits of that field or its value
 /// Instruction: | OP_Code (1010)| DR (3)| PCOffset9 (9)|
 pub(crate) fn load_indirect(instruction: u16, state: &mut State) {
-    let destination_register = instruction >> 9 & 0x7; // Take the 3 DR bits
+    let destination_register = Registers::from(instruction >> 9 & 0x7); // Take the 3 DR bits
     let pc_offset = sign_extend(instruction & 0x1FF, 9); // Take the 9 PCOffset bits and sign_extend them
-    let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], pc_offset);
-    state.registers[destination_register as usize] = state.memory[memory_index as usize];
+    let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], pc_offset) as usize;
+    state.registers[destination_register] = state.memory[state.memory[memory_index] as usize];
     update_flags(destination_register, &mut state.registers);
 }
 /// Binary AND operation with two possible encodings
@@ -36,18 +36,16 @@ pub(crate) fn load_indirect(instruction: u16, state: &mut State) {
 /// * Register mode:    |OP_Code (0101)|DR (3)|SR1 (3)|0|00|SR2 (3)|
 /// * Immediate mode:   |OP_Code (0101)|DR (3)|SR1 (3)|1| IMMR5 (5)|
 pub(crate) fn and(instruction: u16, state: &mut State) {
-    let destination_register = (instruction >> 9) & 0x7;
-    let source_register_1 = (instruction >> 6) & 0x7;
+    let destination_register = Registers::from((instruction >> 9) & 0x7);
+    let source_register_1 = Registers::from((instruction >> 6) & 0x7);
     let mode = (instruction >> 5) & 0x1;
     if mode == 1 {
         let value_to_and = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register as usize] =
-            state.registers[source_register_1 as usize] & value_to_and;
+        state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
     } else {
-        let source_register_2 = instruction & 0x7;
-        state.registers[destination_register as usize] = state.registers
-            [source_register_1 as usize]
-            & state.registers[source_register_2 as usize];
+        let source_register_2 = Registers::from(instruction & 0x7);
+        state.registers[destination_register] =
+            state.registers[source_register_1 as usize] & state.registers[source_register_2];
     }
     update_flags(destination_register, &mut state.registers);
 }
@@ -76,12 +74,12 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
     }
 }
 
-fn update_flags(register: u16, registers: &mut [u16; 10]) {
-    if registers[Registers::from(register)] == 0 {
+fn update_flags(register: Registers, registers: &mut [u16; 10]) {
+    if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
     }
     // If the left-most bit is a 1 then the number is negative
-    else if registers[Registers::from(register)] >> 15 == 1 {
+    else if registers[register] >> 15 == 1 {
         registers[Registers::Rcond] = Flags::Neg as u16;
     } else {
         registers[Registers::Rcond] = Flags::Pos as u16;
@@ -136,7 +134,8 @@ mod test {
             memory: [0; MEM_MAX],
             registers: [0; 10],
         };
-        state.memory[20] = 5;
+        state.memory[20] = 7567;
+        state.memory[7567] = 5;
         state.registers[Registers::Rpc] = 5;
         load_indirect(0b1010_0100_0000_1111, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 5);
@@ -206,7 +205,8 @@ mod test {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
-        state.memory[50] = 25;
+        state.memory[50] = 6575;
+        state.memory[6575] = 25;
         state.registers[Registers::Rpc] = 10;
         load_indirect(0b1010_1010_0010_1000, &mut state); // Move the value from register 40 positions from PC to the register 5
         assert_eq!(state.registers[Registers::Rr5], 25);
