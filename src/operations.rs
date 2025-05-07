@@ -44,13 +44,11 @@ pub(crate) fn and(instruction: u16, state: &mut State) {
     let mode = (instruction >> 5) & 0x1;
     if mode == 1 {
         let value_to_and = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register] =
-            state.registers[source_register_1] & value_to_and;
+        state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
     } else {
         let source_register_2 = Registers::from(instruction & 0x7);
-        state.registers[destination_register] = state.registers
-            [source_register_1]
-            & state.registers[source_register_2];
+        state.registers[destination_register] =
+            state.registers[source_register_1] & state.registers[source_register_2];
     }
     update_flags(destination_register, &mut state.registers);
 }
@@ -81,7 +79,7 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
 
 /// Set the program counter to the value of the base register
 /// * Instruction: |OP_Code (1100)|000| BaseR (3)|000000|
-pub(crate) fn jump(instruction: u16, state: &mut State){
+pub(crate) fn jump(instruction: u16, state: &mut State) {
     let base_register = Registers::from((instruction >> 6) & 0x7);
     state.registers[Registers::Rpc] = state.registers[base_register];
 }
@@ -90,26 +88,39 @@ pub(crate) fn jump(instruction: u16, state: &mut State){
 /// by an singn extended offset or set its value to the one in the base register
 /// * Immediate mode (JSR):    |OP_Code (0100)|1 (Mode)|PCOffset (11)|
 /// * Register mode (JSRR):    |OP_Code (0100)|0 (Mode)|00|BaseR (3)|000000|
-pub(crate) fn jump_to_subrutine(instruction: u16,state: &mut State){
+pub(crate) fn jump_to_subrutine(instruction: u16, state: &mut State) {
     state.registers[Registers::Rr7] = state.registers[Registers::Rpc];
     let mode = (instruction >> 11) & 1;
-    if mode == 1{
-        let offset = sign_extend(instruction & 0x7FF,11);
-        state.registers[Registers::Rpc] = u16::wrapping_add(state.registers[Registers::Rpc], offset);
-    }
-    else {
+    if mode == 1 {
+        let offset = sign_extend(instruction & 0x7FF, 11);
+        state.registers[Registers::Rpc] =
+            u16::wrapping_add(state.registers[Registers::Rpc], offset);
+    } else {
         let base_register = Registers::from((instruction >> 6) & 0x7);
-        state.registers[Registers::Rpc]  = state.registers[base_register];
+        state.registers[Registers::Rpc] = state.registers[base_register];
     }
 }
 
 /// Read the value from the memory location at progam counter + sign extended offset and write it in the destination registry
 /// * Instruction: |OP_Code (0010)|DR (3)|PCOffset (9)|<br>
 /// When finished update flags
-pub(crate) fn load(instruction: u16,state: &mut State){
-    let sign_extended_offset = sign_extend(instruction & 0x1FF,9);
-    let destination_register = Registers::from((instruction>>9)&0x7);
-    let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
+pub(crate) fn load(instruction: u16, state: &mut State) {
+    let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
+    let destination_register = Registers::from((instruction >> 9) & 0x7);
+    let memory_index =
+        u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
+    state.registers[destination_register] = state.memory[memory_index];
+    update_flags(destination_register, &mut state.registers);
+}
+
+/// Load a value from memory to the destination register. <br>
+/// The memory direction is given by the value inside the base register and the sign extended offset
+/// * Instruction: |OP_Code (0110)|DR (3)|BaseR (3)|Offset (6)|<br>
+pub(crate) fn load_register(instruction: u16,state: &mut State){
+    let sign_extended_offset = sign_extend(instruction & 0x3F, 6);
+    let base_register = Registers::from(instruction>>6 & 0x7);
+    let destination_register = Registers::from(instruction>>9 & 0x7);
+    let memory_index = u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
     state.registers[destination_register] = state.memory[memory_index];
     update_flags(destination_register, &mut state.registers);
 }
@@ -240,30 +251,30 @@ mod test {
     }
 
     #[test]
-    fn jump_test(){
+    fn jump_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
         state.registers[Registers::Rr5] = 25;
         jump(0xC140, &mut state);
-        assert_eq!(state.registers[Registers::Rpc],25);
+        assert_eq!(state.registers[Registers::Rpc], 25);
     }
 
     #[test]
-    fn jump_to_subrutine_test(){
+    fn jump_to_subrutine_test() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
         state.registers[Registers::Rpc] = 15;
         jump_to_subrutine(0x4FFB, &mut state);
-        assert_eq!(state.registers[Registers::Rpc],10);
-        assert_eq!(state.registers[Registers::Rr7],15);
+        assert_eq!(state.registers[Registers::Rpc], 10);
+        assert_eq!(state.registers[Registers::Rr7], 15);
         state.registers[Registers::Rr5] = 50;
         jump_to_subrutine(0x4140, &mut state);
-        assert_eq!(state.registers[Registers::Rr7],10);
-        assert_eq!(state.registers[Registers::Rpc],50);
+        assert_eq!(state.registers[Registers::Rr7], 10);
+        assert_eq!(state.registers[Registers::Rpc], 50);
     }
 
     #[test]
@@ -274,35 +285,60 @@ mod test {
         };
         state.memory[50] = 70;
         load(0x2E32, &mut state);
-        assert_eq!(state.registers[Registers::Rr7],70);
+        assert_eq!(state.registers[Registers::Rr7], 70);
+        assert_eq!(state.registers[Registers::Rcond], Flags::Pos as u16);
+    }
+
+    #[test]
+    fn load_register_test(){
+        let mut state = State {
+            memory: [0; MEM_MAX],
+            registers: [0; Registers::Rcount as usize],
+        };
+        state.memory[50] = 78;
+        state.registers[Registers::Rr2] = 25;
+        load_register(0x6A99, &mut state);
+        assert_eq!(state.registers[Registers::Rr5],78);
         assert_eq!(state.registers[Registers::Rcond],Flags::Pos as u16);
     }
 
     #[test]
     fn integration_test() {
+        // Initializate values
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
         };
         state.memory[50] = 25689;
         state.memory[25689] = 25;
+        state.memory[65] = 777;
         state.memory[10] = 50;
         state.registers[Registers::Rpc] = 10;
-        load_indirect(0xAA28, &mut state); // Move the value from memory 40 positions from PC to the register 5
+        // Indirectly insert a value in register 5
+        load_indirect(0xAA28, &mut state);
         assert_eq!(state.registers[Registers::Rr5], 25);
-        add(0x1572, &mut state); // Add -14 to register 5 and save it in register 2
+        // Take the value from register 5, add -14 to it and save it in register 2
+        add(0x1572, &mut state); 
         assert_eq!(state.registers[Registers::Rr2], 11);
+        // Make an and operation that will clear the value in register 2
         and(0x54B4, &mut state);
         assert_eq!(state.registers[Registers::Rr2], 0x0000);
         assert_eq!(state.registers[Registers::Rcond], Flags::Zro as u16);
+        // If the Rcond flag is 0 increase the progam counter
         conditional_branch(0x405, &mut state);
         assert_eq!(state.registers[Registers::Rpc], 15);
+        // Set the program counter to the value from register5
         jump(0xC140, &mut state);
-        assert_eq!(state.registers[Registers::Rpc],25);
+        assert_eq!(state.registers[Registers::Rpc], 25);
+        // Jump by adding an offset to the PC, previously save its value un register 7
         jump_to_subrutine(0x4FFB, &mut state);
-        assert_eq!(state.registers[Registers::Rr7],25);
-        assert_eq!(state.registers[Registers::Rpc],20);
+        assert_eq!(state.registers[Registers::Rr7], 25);
+        assert_eq!(state.registers[Registers::Rpc], 20);
+        // Directly load a value from memory to register 2
         load(0x25F6, &mut state);
-        assert_eq!(state.registers[Registers::Rr2],50);
+        assert_eq!(state.registers[Registers::Rr2], 50);
+        // Load from register 2 with an offset of 15 to register 3
+        load_register(0x668f, &mut state);
+        assert_eq!(state.registers[Registers::Rr3],777);
     }
 }
