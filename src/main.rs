@@ -1,8 +1,9 @@
+use operations::*;
 use std::env;
 use std::ops::{Index, IndexMut};
 pub mod file_management;
-pub mod operations;
-use operations::*;
+mod operations;
+mod tests;
 static MEM_MAX: usize = 1 << 16;
 static PC_START: u16 = 0x3000;
 #[derive(Clone, Copy)]
@@ -130,15 +131,15 @@ fn main() -> Result<(), String> {
             Operations::Br => conditional_branch(instruction, &mut state),
             Operations::Add => add(instruction, &mut state),
             Operations::Ld => load(instruction, &mut state),
-            Operations::St => todo!(), //store(instruction),
+            Operations::St => store(instruction, &mut state),
             Operations::Jsr => jump_to_subrutine(instruction, &mut state),
             Operations::And => and(instruction, &mut state),
             Operations::Ldr => load_register(instruction, &mut state),
-            Operations::Str => todo!(), //store_register(instruction),
+            Operations::Str => store_register(instruction, &mut state),
             Operations::Rti => todo!(),
-            Operations::Not => todo!(), //not(instruction),
+            Operations::Not => not(instruction, &mut state),
             Operations::Ldi => load_indirect(instruction, &mut state),
-            Operations::Sti => todo!(), //store_indirect(instruction),
+            Operations::Sti => store_indirect(instruction, &mut state),
             Operations::Jmp => jump(instruction, &mut state),
             Operations::Res => todo!(),
             Operations::Lea => load_effective_address(instruction, &mut state),
