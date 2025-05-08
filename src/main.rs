@@ -1,12 +1,21 @@
-use operations::*;
 use core::panic;
-use std::env;
+use memory_management::memory_read;
+use operations::*;
+use std::io::{Read, stdin};
 use std::ops::{Index, IndexMut};
+use std::time::Duration;
+use std::{env, io};
+use termios::*;
 pub mod file_management;
 mod operations;
 mod tests;
+use std::os::fd::AsRawFd;
+use timeout_readwrite::TimeoutReadExt;
+mod memory_management;
+
 static MEM_MAX: usize = 1 << 16;
 static PC_START: u16 = 0x3000;
+
 #[derive(Clone, Copy)]
 enum Registers {
     Rr0,
@@ -106,12 +115,19 @@ struct State {
     running: bool,
 }
 
-fn main(){
+fn main() {
+    let mut termio = Termios::from_fd(io::stdin().as_raw_fd()).unwrap();
+    let _ = ctrlc::set_handler(move || {
+        restore_input_buffering(&mut termio);
+        std::process::exit(0);
+    });
+    //ctrlc::set_handler(move || {restore_input_buffering(&mut termio); return;}).unwrap();
+    disable_input_buffering(&mut termio);
     // Initialize empty memory and array with registers
     let mut state = State {
         memory: [0_u16; MEM_MAX],
         registers: [0_u16; Registers::Rcount as usize],
-        running: true
+        running: true,
     };
     // Read file
     let args: Vec<String> = env::args().collect();
@@ -126,10 +142,10 @@ fn main(){
     state.registers[Registers::Rcond] = Flags::Zro as u16;
     while state.running {
         // Get next instruction from memory, increment the PC by one and get the OP_CODE
-        state.memory[state.registers[Registers::Rpc] as usize]= 0xF023;
-        let instruction = state.memory[state.registers[Registers::Rpc] as usize];
+        let instruction = memory_read(state.registers[Registers::Rpc] as usize, &mut state);
         state.registers[Registers::Rpc] += 1;
         let op_code = instruction >> 12;
+
         match Operations::from(op_code) {
             Operations::Br => conditional_branch(instruction, &mut state),
             Operations::Add => add(instruction, &mut state),
@@ -146,7 +162,30 @@ fn main(){
             Operations::Jmp => jump(instruction, &mut state),
             Operations::Res => todo!(),
             Operations::Lea => load_effective_address(instruction, &mut state),
-            Operations::Trap => trap(instruction,&mut state),
+            Operations::Trap => trap(instruction, &mut state),
         }
+    }
+    restore_input_buffering(&mut termio);
+}
+
+fn disable_input_buffering(termio: &mut Termios) {
+    tcgetattr(io::stdin().as_raw_fd(), termio).unwrap();
+    let new_tio = termio;
+    new_tio.c_lflag &= !ICANON & !ECHO;
+    tcsetattr(io::stdin().as_raw_fd(), TCSANOW, new_tio).unwrap();
+}
+
+fn restore_input_buffering(termio: &mut Termios) {
+    tcsetattr(io::stdin().as_raw_fd(), TCSANOW, termio).unwrap();
+}
+
+pub fn check_key() -> Result<u16, &'static str> {
+    let mut buffer = [0; 1];
+    match stdin()
+        .with_timeout(Duration::new(0, 0))
+        .read_exact(&mut buffer)
+    {
+        Ok(_) => Ok(buffer[0] as u16),
+        Err(_) => Err("Failed to read the value"),
     }
 }

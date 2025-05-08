@@ -1,13 +1,13 @@
 #[cfg(test)]
 pub mod tests {
     use crate::*;
-    
+
     #[test]
     fn add_test_mode_0() {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         add(0x1E41, &mut state);
         assert_eq!(state.registers[7], 0);
@@ -23,7 +23,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         add(0x1E61, &mut state);
         assert_eq!(state.registers[7], 1);
@@ -38,7 +38,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; 10],
-            running:true,
+            running: true,
         };
         state.memory[20] = 7890;
         state.memory[7890] = 5;
@@ -57,7 +57,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rr5] = 0xFFFF;
         state.registers[Registers::Rr6] = 0x000F;
@@ -71,7 +71,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rr5] = 0xFFFF;
         and(0x5F66, &mut state);
@@ -87,7 +87,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rcond] = Flags::Neg as u16; // Flag Neg = 1
         conditional_branch(0x805, &mut state); // Test Flag Neg
@@ -113,7 +113,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rr5] = 25;
         jump(0xC140, &mut state);
@@ -125,7 +125,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rpc] = 15;
         jump_to_subrutine(0x4FFB, &mut state);
@@ -142,7 +142,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.memory[50] = 70;
         load(0x2E32, &mut state);
@@ -155,7 +155,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.memory[50] = 78;
         state.registers[Registers::Rr2] = 25;
@@ -169,7 +169,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rpc] = 15;
         load_effective_address(0xE21F, &mut state);
@@ -181,7 +181,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rr5] = 0x00FF;
         not(0x977F, &mut state);
@@ -197,7 +197,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rr4] = 777;
         store(0x3819, &mut state);
@@ -209,7 +209,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.memory[25] = 50;
         state.registers[Registers::Rr4] = 777;
@@ -222,7 +222,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.registers[Registers::Rr4] = 20;
         state.registers[Registers::Rr5] = 50;
@@ -236,7 +236,7 @@ pub mod tests {
         let mut state = State {
             memory: [0; MEM_MAX],
             registers: [0; Registers::Rcount as usize],
-            running:true,
+            running: true,
         };
         state.memory[50] = 25689;
         state.memory[25689] = 25;
