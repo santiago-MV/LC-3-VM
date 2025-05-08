@@ -118,11 +118,19 @@ struct State {
 fn main() {
     let mut termio = Termios::from_fd(io::stdin().as_raw_fd()).unwrap();
     let _ = ctrlc::set_handler(move || {
-        restore_input_buffering(&mut termio);
+        match restore_input_buffering(&mut termio) {
+            Ok(_) => (),
+            Err(m) => print!("{}", m),
+        };
         std::process::exit(0);
     });
-    //ctrlc::set_handler(move || {restore_input_buffering(&mut termio); return;}).unwrap();
-    disable_input_buffering(&mut termio);
+    match disable_input_buffering(&mut termio) {
+        Ok(_) => (),
+        Err(m) => {
+            print!("{}", m);
+            return;
+        }
+    };
     // Initialize empty memory and array with registers
     let mut state = State {
         memory: [0_u16; MEM_MAX],
@@ -155,28 +163,51 @@ fn main() {
             Operations::And => and(instruction, &mut state),
             Operations::Ldr => load_register(instruction, &mut state),
             Operations::Str => store_register(instruction, &mut state),
-            Operations::Rti => todo!(),
+            Operations::Rti => {
+                print!(
+                    "Error: Invalid OPCode:  RTI = {:#x} is not defined",
+                    Operations::Rti as u16
+                );
+                std::process::exit(1);
+            }
             Operations::Not => not(instruction, &mut state),
             Operations::Ldi => load_indirect(instruction, &mut state),
             Operations::Sti => store_indirect(instruction, &mut state),
             Operations::Jmp => jump(instruction, &mut state),
-            Operations::Res => todo!(),
+            Operations::Res => {
+                print!(
+                    "Error: Invalid OPCode:  RES = {:#x} is not defined",
+                    Operations::Res as u16
+                );
+                std::process::exit(1);
+            }
             Operations::Lea => load_effective_address(instruction, &mut state),
             Operations::Trap => trap(instruction, &mut state),
         }
     }
-    restore_input_buffering(&mut termio);
+    match restore_input_buffering(&mut termio) {
+        Ok(_) => (),
+        Err(m) => {
+            print!("{}", m);
+            return;
+        }
+    };
 }
 
-fn disable_input_buffering(termio: &mut Termios) {
-    tcgetattr(io::stdin().as_raw_fd(), termio).unwrap();
+fn disable_input_buffering(termio: &mut Termios) -> Result<(), &str> {
     let new_tio = termio;
     new_tio.c_lflag &= !ICANON & !ECHO;
-    tcsetattr(io::stdin().as_raw_fd(), TCSANOW, new_tio).unwrap();
+    match tcsetattr(io::stdin().as_raw_fd(), TCSANOW, new_tio) {
+        Ok(_) => Ok(()),
+        Err(_) => Err("Failed to disable input buffering"),
+    }
 }
 
-fn restore_input_buffering(termio: &mut Termios) {
-    tcsetattr(io::stdin().as_raw_fd(), TCSANOW, termio).unwrap();
+fn restore_input_buffering(termio: &mut Termios) -> Result<(), &str> {
+    match tcsetattr(io::stdin().as_raw_fd(), TCSANOW, termio) {
+        Ok(_) => Ok(()),
+        Err(_) => Err("Failed to restore input buffering"),
+    }
 }
 
 pub fn check_key() -> Result<u16, &'static str> {
