@@ -53,14 +53,13 @@ pub(crate) fn and(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let destination_register = Registers::from((instruction >> 9) & 0x7)?;
     let source_register_1 = Registers::from((instruction >> 6) & 0x7)?;
     let mode = (instruction >> 5) & 0x1;
-    if mode == 1 {
-        let value_to_and = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
+    let value_to_and = if mode == 1 {
+        sign_extend((instruction) & 0x1F, 5)
     } else {
-        let source_register_2 = Registers::from(instruction & 0x7)?;
-        state.registers[destination_register] =
-            state.registers[source_register_1] & state.registers[source_register_2];
-    }
+        let source_register_2 = Registers::from(instruction & 0x7);
+        state.registers[source_register_2]
+    };
+    state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
     update_flags(destination_register, &mut state.registers);
     Ok(())
 }
@@ -79,10 +78,10 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
     let zero_indicator = (instruction >> 10) & 1;
     let positive_indicator = (instruction >> 9) & 1;
     let current_flags = state.registers[Registers::Rcond];
-    if ((negative_indicator & current_flags >> 2) == 1)
-        || ((zero_indicator & current_flags >> 1) == 1)
-        || ((positive_indicator & current_flags) == 1)
-    {
+    let is_negative = (negative_indicator & current_flags >> 2) == 1;
+    let is_zero = (zero_indicator & current_flags >> 1) == 1;
+    let is_positive = (positive_indicator & current_flags) == 1;
+    if is_negative || is_zero || is_positive {
         let pc_offset = sign_extend(instruction & 0x1FF, 9);
         state.registers[Registers::Rpc] =
             u16::wrapping_add(state.registers[Registers::Rpc], pc_offset)
@@ -177,7 +176,7 @@ pub(crate) fn store(instruction: u16, state: &mut State) -> Result<(), Errors> {
     Ok(())
 }
 
-/// The instruction receives the address where the memory address for storing the value is located, it reads it and saves the register value in it
+/// The instruction takes the memory address containing the memory location where the source register's value should be stored and stores it.
 /// * Instruction: |OP_Code (1011)|SR (3)|PCOffset (9)|<br>
 pub(crate) fn store_indirect(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
