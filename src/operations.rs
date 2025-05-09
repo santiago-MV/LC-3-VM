@@ -56,7 +56,7 @@ pub(crate) fn and(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let value_to_and = if mode == 1 {
         sign_extend((instruction) & 0x1F, 5)
     } else {
-        let source_register_2 = Registers::from(instruction & 0x7);
+        let source_register_2 = Registers::from(instruction & 0x7)?;
         state.registers[source_register_2]
     };
     state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
