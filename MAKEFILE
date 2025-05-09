@@ -1,7 +1,7 @@
 build:
 	cargo build
 run:
-	cargo run
+	cargo run $(path)
 clippy:
 	cargo clippy -- -D warnings
 fmt:
