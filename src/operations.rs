@@ -1,5 +1,36 @@
-use crate::{Flags, Registers, State};
+use crate::{
+    Flags, Registers, State,
+    memory_management::{memory_read, memory_write},
+};
+use std::{
+    char,
+    io::{Read, Write, stdin, stdout},
+};
 
+const NULL_WORD: u16 = 0x0;
+/// Traps are predefined routines, each trap in the enum represents a routine
+enum Traps {
+    Getc = 0x20,
+    Out = 0x21,
+    Puts = 0x22,
+    In = 0x23,
+    Putsp = 0x24,
+    Halt = 0x25,
+}
+
+impl From<u16> for Traps {
+    fn from(value: u16) -> Self {
+        match value {
+            0x20 => Traps::Getc,
+            0x21 => Traps::Out,
+            0x22 => Traps::Puts,
+            0x23 => Traps::In,
+            0x24 => Traps::Putsp,
+            0x25 => Traps::Halt,
+            _ => todo!(),
+        }
+    }
+}
 /// Binary ADD operation with 2 possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0001)|DR (3)|SR1 (3)|0|00|SR2 (3)|
@@ -31,7 +62,8 @@ pub(crate) fn load_indirect(instruction: u16, state: &mut State) {
     let destination_register = Registers::from((instruction >> 9) & 0x7); // Take the 3 DR bits
     let pc_offset = sign_extend(instruction & 0x1FF, 9); // Take the 9 PCOffset bits and sign_extend them
     let memory_index = u16::wrapping_add(state.registers[Registers::Rpc], pc_offset) as usize;
-    state.registers[destination_register] = state.memory[state.memory[memory_index] as usize];
+    state.registers[destination_register] =
+        memory_read(memory_read(memory_index as usize, state) as usize, state);
     update_flags(destination_register, &mut state.registers);
 }
 /// Binary AND operation with two possible encodings
@@ -109,7 +141,7 @@ pub(crate) fn load(instruction: u16, state: &mut State) {
     let destination_register = Registers::from((instruction >> 9) & 0x7);
     let memory_index =
         u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
-    state.registers[destination_register] = state.memory[memory_index];
+    state.registers[destination_register] = memory_read(memory_index, state);
     update_flags(destination_register, &mut state.registers);
 }
 
@@ -123,7 +155,7 @@ pub(crate) fn load_register(instruction: u16, state: &mut State) {
     let destination_register = Registers::from(instruction >> 9 & 0x7);
     let memory_index =
         u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
-    state.registers[destination_register] = state.memory[memory_index];
+    state.registers[destination_register] = memory_read(memory_index, state);
     update_flags(destination_register, &mut state.registers);
 }
 
@@ -155,7 +187,7 @@ pub(crate) fn store(instruction: u16, state: &mut State) {
     let source_register = Registers::from((instruction >> 9) & 0x7);
     let memory_address =
         u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
-    state.memory[memory_address] = state.registers[source_register];
+    memory_write(memory_address, state.registers[source_register], state);
 }
 
 /// The instruction takes the memory address containing the memory location where the source register's value should be stored and stores it.
@@ -165,7 +197,11 @@ pub(crate) fn store_indirect(instruction: u16, state: &mut State) {
     let source_register = Registers::from((instruction >> 9) & 0x7);
     let memory_address =
         u16::wrapping_add(state.registers[Registers::Rpc], sign_extended_offset) as usize;
-    state.memory[state.memory[memory_address] as usize] = state.registers[source_register];
+    memory_write(
+        memory_read(memory_address, state) as usize,
+        state.registers[source_register],
+        state,
+    );
 }
 /// Store the register in memory, the address is calculated using the base register's content and a sign extended offset
 /// * Instruction: |OP_Code (0111)|SR (3)|BaseR (3)|Offset (6)|<br>
@@ -175,9 +211,95 @@ pub(crate) fn store_register(instruction: u16, state: &mut State) {
     let source_register = Registers::from(instruction >> 9 & 0x7);
     let memory_address =
         u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
-    state.memory[memory_address] = state.registers[source_register];
+    memory_write(memory_address, state.registers[source_register], state);
 }
 
+/// Given a trap instruction call the correct routine
+/// * Instruction: |OP_Code (1111)|0000|TrapVect (8)|<br>
+pub(crate) fn trap(instruction: u16, state: &mut State) {
+    let routine = Traps::from(instruction & 0xFF);
+    match routine {
+        Traps::Getc => trap_routine_getc(state),
+        Traps::Out => trap_routine_out(state),
+        Traps::Puts => trap_routine_puts(state),
+        Traps::In => trap_routine_in(state),
+        Traps::Putsp => trap_routine_putsp(state),
+        Traps::Halt => trap_routine_halt(state),
+    }
+}
+
+/// Prints HALT and stops executing the program
+fn trap_routine_halt(state: &mut State) {
+    print!("HALT");
+    state.running = false;
+}
+
+/// Output a string in big endian, for doing this take the memory address from the R0 register,
+/// read the value in that memory position, if its different from 0x0 then print the less significant byte first
+/// and if the more significant byte is different from 0x0 print it. It continues reading from the next memory position until it finds a 0x0
+fn trap_routine_putsp(state: &mut State) {
+    let mut address = state.registers[Registers::Rr0] as usize;
+    let mut character = memory_read(address, state);
+    while character != NULL_WORD {
+        let char1 = character & 0xFF;
+        print!("{}", char::from_u32(char1 as u32).unwrap());
+        let char2 = character >> 8;
+        if char2 != NULL_WORD {
+            print!("{}", char::from_u32(char2 as u32).unwrap());
+        }
+        // Fetch next character
+        address += 1;
+        character = memory_read(address, state);
+    }
+}
+
+/// Prompt for input character.
+/// Print a line asking the user to enter a character, read the character, save it in register 0 and update the flags.
+fn trap_routine_in(state: &mut State) {
+    print!("Enter character: ");
+    let input = 0_u8;
+    match stdin().read_exact(&mut [input]) {
+        Ok(_) => print!("{}", input),
+        Err(_) => todo!(),
+    };
+    state.registers[Registers::Rr0] = input as u16;
+    update_flags(Registers::Rr0, &mut state.registers);
+}
+
+/// Reads a character from register 0 and prints it
+fn trap_routine_out(state: &State) {
+    let character = state.registers[Registers::Rr0];
+    print!("{}", char::from_u32(character as u32).unwrap());
+}
+
+/// Reads a single character from the keyboard and save it in the Register 0
+fn trap_routine_getc(state: &mut State) {
+    let mut input = [0u8];
+    match stdin().read_exact(&mut input) {
+        Ok(_) => state.registers[Registers::Rr0] = input[0] as u16, // Is this ok?
+        Err(_) => todo!(),
+    };
+    update_flags(Registers::Rr0, &mut state.registers);
+}
+
+/// Print a string from memory
+/// Each memory position will represent one char, start reading memory at the address in the register R0, print the read character
+/// and continue reading the next memory position
+fn trap_routine_puts(state: &mut State) {
+    let mut address = state.registers[Registers::Rr0] as usize;
+    let mut character = memory_read(address, state);
+    while character != NULL_WORD {
+        let char_char = char::from_u32(character as u32).unwrap();
+        print!("{}", char_char);
+        // Fetch next character
+        address += 1;
+        character = memory_read(address, state);
+    }
+    let _ = stdout().flush();
+}
+
+/// Receives a register and the current registers status.
+/// Update the RCond register acording to the value of the register passed by argument
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
