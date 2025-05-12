@@ -7,7 +7,7 @@ use std::{
     io::{Read, Write, stdin, stdout},
 };
 
-const NULL_WORD:u8 = 0x0;
+const NULL_WORD: u8 = 0x0;
 /// Traps are predefined routines, each trap in the enum represents a routine
 enum Traps {
     Getc = 0x20,
