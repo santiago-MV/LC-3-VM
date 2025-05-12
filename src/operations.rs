@@ -7,7 +7,7 @@ use std::{
     io::{Read, Write, stdin, stdout},
 };
 
-const NULL_WORD: u8 = 0x0;
+const NULL_WORD: u16 = 0x0;
 /// Traps are predefined routines, each trap in the enum represents a routine
 enum Traps {
     Getc = 0x20,
@@ -241,11 +241,11 @@ fn trap_routine_halt(state: &mut State) {
 fn trap_routine_putsp(state: &mut State) {
     let mut address = state.registers[Registers::Rr0] as usize;
     let mut character = memory_read(address, state);
-    while character != NULL_WORD as u16 {
+    while character != NULL_WORD {
         let char1 = character & 0xFF;
         print!("{}", char::from_u32(char1 as u32).unwrap());
         let char2 = character >> 8;
-        if char2 != NULL_WORD as u16 {
+        if char2 != NULL_WORD {
             print!("{}", char::from_u32(char2 as u32).unwrap());
         }
         // Fetch next character
@@ -289,7 +289,7 @@ fn trap_routine_getc(state: &mut State) {
 fn trap_routine_puts(state: &mut State) {
     let mut address = state.registers[Registers::Rr0] as usize;
     let mut character = memory_read(address, state);
-    while character != NULL_WORD as u16 {
+    while character != NULL_WORD {
         let char_char = char::from_u32(character as u32).unwrap();
         print!("{}", char_char);
         // Fetch next character
