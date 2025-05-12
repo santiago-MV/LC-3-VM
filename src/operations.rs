@@ -7,6 +7,8 @@ use std::{
     io::{Read, Write, stdin, stdout},
 };
 
+const NULL_WORD: u16 = 0x0;
+
 /// Binary ADD operation with 2 possible encodings
 /// The number between the () indicates the amount of bits of that field or its value
 /// * Register mode:    |OP_Code (0001)|DR (3)|SR1 (3)|0|00|SR2 (3)|
@@ -217,24 +219,26 @@ pub(crate) fn trap(instruction: u16, state: &mut State) -> Result<(), Errors> {
     Ok(())
 }
 
-/// Stops running the program
+/// Prints HALT and stops executing the program
 fn trap_routine_halt(state: &mut State) {
     print!("HALT");
     state.running = false;
 }
 
-/// Output a string in big endian
+/// Output a string in big endian, for doing this take the memory address from the R0 register,
+/// read the value in that memory position, if its different from 0x0 then print the less significant byte first
+/// and if the more significant byte is different from 0x0 print it. It continues reading from the next memory position until it finds a 0x0
 fn trap_routine_putsp(state: &mut State) {
     let mut address = state.registers[Registers::Rr0] as usize;
     let mut character = memory_read(address, state);
-    while character != 0x0000 {
+    while character != NULL_WORD {
         if let Some(char1) = char::from_u32((character & 0xFF) as u32) {
             print!("{}", char1);
         } else {
             break;
         };
         let char2 = character >> 8;
-        if char2 != 0x0 {
+        if char2 != NULL_WORD {
             if let Some(c2) = char::from_u32(char2 as u32) {
                 print!("{}", c2);
             }
@@ -245,7 +249,8 @@ fn trap_routine_putsp(state: &mut State) {
     }
 }
 
-/// Prompt for input character
+/// Prompt for input character.
+/// Print a line asking the user to enter a character, read the character, save it in register 0 and update the flags.
 fn trap_routine_in(state: &mut State) -> Result<(), Errors> {
     print!("Enter character: ");
     let input = 0_u8;
@@ -280,11 +285,13 @@ fn trap_routine_getc(state: &mut State) -> Result<(), Errors> {
     Ok(())
 }
 
-/// Reads chars from memory, each char uses one memory space, and print it
+/// Print a string from memory
+/// Each memory position will represent one char, start reading memory at the address in the register R0, print the read character
+/// and continue reading the next memory position
 fn trap_routine_puts(state: &mut State) {
     let mut address = state.registers[Registers::Rr0] as usize;
     let mut character = memory_read(address, state);
-    while character != 0x0000 {
+    while character != NULL_WORD {
         if let Some(char_char) = char::from_u32(character as u32) {
             print!("{}", char_char);
         } else {
@@ -297,6 +304,8 @@ fn trap_routine_puts(state: &mut State) {
     let _ = stdout().flush();
 }
 
+/// Receives a register and the current registers status.
+/// Update the RCond register acording to the value of the register passed by argument
 fn update_flags(register: Registers, registers: &mut [u16; 10]) {
     if registers[register] == 0 {
         registers[Registers::Rcond] = Flags::Zro as u16;
