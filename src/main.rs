@@ -1,4 +1,3 @@
-use memory_management::memory_read;
 use operations::*;
 use std::io::{Read, stdin};
 use std::ops::{Index, IndexMut};
@@ -9,12 +8,17 @@ pub mod file_management;
 mod operations;
 mod tests;
 use std::os::fd::AsRawFd;
-use timeout_readwrite::TimeoutReadExt;
-mod memory_management;
 use thiserror::Error;
+use timeout_readwrite::TimeoutReadExt;
 
 static MEM_MAX: usize = 1 << 16;
 static PC_START: u16 = 0x3000;
+
+pub enum MemoryMappedRegisters {
+    MrKbsr = 0xFE00,
+    MrKbdr = 0xFE02,
+}
+
 /// Traps are predefined routines, each trap in the enum represents a routine
 #[derive(Debug)]
 pub enum Traps {
@@ -180,6 +184,23 @@ impl State {
         state.registers[Registers::Flags] = Flags::Zro as u16;
         state
     }
+
+    pub fn memory_write(&mut self, adress: usize, value: u16) {
+        self.memory[adress] = value;
+    }
+
+    pub fn memory_read(&mut self, address: usize) -> u16 {
+        if address == MemoryMappedRegisters::MrKbsr as usize {
+            match check_key() {
+                Ok(rv) => {
+                    self.memory[MemoryMappedRegisters::MrKbsr as usize] = 1 << 15;
+                    self.memory[MemoryMappedRegisters::MrKbdr as usize] = rv
+                }
+                Err(_) => self.memory[MemoryMappedRegisters::MrKbsr as usize] = 0,
+            };
+        }
+        self.memory[address]
+    }
 }
 
 fn disable_input_buffering(termio: &mut Termios) -> Result<(), Errors> {
@@ -201,7 +222,7 @@ fn restore_input_buffering(termio: &mut Termios) -> Result<(), Errors> {
 fn run_loop(state: &mut State) -> Result<(), Errors> {
     while state.running {
         // Get next instruction from memory, increment the PC by one and get the OP_CODE
-        let instruction = memory_read(state.registers[Registers::Pc] as usize, state);
+        let instruction = state.memory_read(state.registers[Registers::Pc] as usize);
         state.registers[Registers::Pc] += 1;
         run_step(instruction, state)?;
     }
@@ -305,8 +326,7 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-
-    use crate::{memory_management::memory_write, *};
+    use crate::*;
 
     #[test]
     fn loop_test() {
@@ -315,28 +335,28 @@ mod test {
             registers: [0_u16; Registers::InstRet as usize],
             running: true,
         };
-        memory_write(50, 25689, &mut state);
-        memory_write(25689, 25, &mut state);
-        memory_write(56, 777, &mut state);
-        memory_write(9, 50, &mut state);
+        state.memory_write(50, 25689);
+        state.memory_write(25689, 25);
+        state.memory_write(56, 777);
+        state.memory_write(9, 50);
         state.registers[Registers::Pc] = 10;
-        memory_write(10, 0xAA27, &mut state); // Load indirect 25 to R5
-        memory_write(11, 0x27FD, &mut state); // Load 50 to R3
-        memory_write(12, 0x12C5, &mut state); // Add R3 + R5 into R1
-        memory_write(13, 0x56E0, &mut state); // Clear R3 by doing R3 AND 0x0
-        memory_write(14, 0x0405, &mut state); // Branch to 20 if flag Z = 1
-        memory_write(20, 0x96FF, &mut state); // Negate R3
-        memory_write(21, 0xC140, &mut state); // Jump to the value at R5 PC = 25
-        memory_write(25, 0x635F, &mut state); // Load register R1 with R5 + 40
-        memory_write(26, 0x4048, &mut state); // Jump to the value at register 1, R7 = 27, PC = 777
-        memory_write(777, 0xB34C, &mut state); // Save at memory address 0 the value from register 1
-        memory_write(778, 0x3E03, &mut state); // Save R7 into 782
-        memory_write(779, 0x7A40, &mut state); // Save R5 into 777
-        memory_write(780, 0xF025, &mut state); // Halt
+        state.memory_write(10, 0xAA27); // Load indirect 25 to R5
+        state.memory_write(11, 0x27FD); // Load 50 to R3
+        state.memory_write(12, 0x12C5); // Add R3 + R5 into R1
+        state.memory_write(13, 0x56E0); // Clear R3 by doing R3 AND 0x0
+        state.memory_write(14, 0x0405); // Branch to 20 if flag Z = 1
+        state.memory_write(20, 0x96FF); // Negate R3
+        state.memory_write(21, 0xC140); // Jump to the value at R5 PC = 25
+        state.memory_write(25, 0x635F); // Load register R1 with R5 + 40
+        state.memory_write(26, 0x4048); // Jump to the value at register 1, R7 = 27, PC = 777
+        state.memory_write(777, 0xB34C); // Save at memory address 0 the value from register 1
+        state.memory_write(778, 0x3E03); // Save R7 into 782
+        state.memory_write(779, 0x7A40); // Save R5 into 777
+        state.memory_write(780, 0xF025); // Halt
         let _ = run_loop(&mut state);
-        assert_eq!(memory_read(0, &mut state), 777);
-        assert_eq!(memory_read(782, &mut state), 27);
-        assert_eq!(memory_read(777, &mut state), 25);
+        assert_eq!(state.memory_read(0), 777);
+        assert_eq!(state.memory_read(782), 27);
+        assert_eq!(state.memory_read(777), 25);
         assert_eq!(state.registers[Registers::R7], 27);
     }
 }
