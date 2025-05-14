@@ -11,10 +11,12 @@ mod tests;
 use std::os::fd::AsRawFd;
 use timeout_readwrite::TimeoutReadExt;
 mod memory_management;
+use thiserror::Error;
 
 static MEM_MAX: usize = 1 << 16;
 static PC_START: u16 = 0x3000;
 /// Traps are predefined routines, each trap in the enum represents a routine
+#[derive(Debug)]
 pub enum Traps {
     Getc = 0x20,
     Out = 0x21,
@@ -24,8 +26,9 @@ pub enum Traps {
     Halt = 0x25,
 }
 
-impl Traps {
-    fn from(value: u16) -> Result<Traps, Errors> {
+impl TryFrom<u16> for Traps {
+    type Error = Errors;
+    fn try_from(value: u16) -> Result<Traps, Self::Error> {
         match value {
             0x20 => Ok(Traps::Getc),
             0x21 => Ok(Traps::Out),
@@ -33,47 +36,60 @@ impl Traps {
             0x23 => Ok(Traps::In),
             0x24 => Ok(Traps::Putsp),
             0x25 => Ok(Traps::Halt),
-            badcode => Err(Errors::BadTrapCode(badcode.to_string())),
+            badcode => Err(Errors::BadTrapCode(badcode)),
         }
     }
 }
+#[derive(Error, Debug)]
 pub enum Errors {
+    #[error("Bad register: `{0}`")]
     BadRegisterReference(String),
+    #[error("Bad operation code: `{0}`")]
     BadOpCode(String),
-    BadFile(String),
+    #[error("Bad file: {0}")]
+    BadFile(#[from] std::io::Error),
+    #[error("Couldn't disable input buffering")]
     DisableInputBuffering,
+    #[error("Couldn't restore input buffering")]
     RestoreInputBuffering,
-    BadTrapCode(String),
+    #[error("Bad trap code: `{0}`")]
+    BadTrapCode(u16),
+    #[error("Bad trap `{0:?}`")]
     Trap(Traps),
+    #[error("Not enough arguments")]
     FewArguments,
+    #[error("Couldn't initialize termios")]
     BadTermios,
+    #[error("Bad image size")]
+    BadImageSize,
 }
 #[derive(Clone, Copy)]
 enum Registers {
-    Rr0,
-    Rr1,
-    Rr2,
-    Rr3,
-    Rr4,
-    Rr5,
-    Rr6,
-    Rr7,
-    Rpc,
-    Rcond,
-    Rcount,
+    R0,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
+    R7,
+    Pc,
+    Flags,
+    InstRet,
 }
 
-impl Registers {
-    fn from(value: u16) -> Result<Self, Errors> {
+impl TryFrom<u16> for Registers {
+    type Error = Errors;
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(Registers::Rr0),
-            1 => Ok(Registers::Rr1),
-            2 => Ok(Registers::Rr2),
-            3 => Ok(Registers::Rr3),
-            4 => Ok(Registers::Rr4),
-            5 => Ok(Registers::Rr5),
-            6 => Ok(Registers::Rr6),
-            7 => Ok(Registers::Rr7),
+            0 => Ok(Registers::R0),
+            1 => Ok(Registers::R1),
+            2 => Ok(Registers::R2),
+            3 => Ok(Registers::R3),
+            4 => Ok(Registers::R4),
+            5 => Ok(Registers::R5),
+            6 => Ok(Registers::R6),
+            7 => Ok(Registers::R7),
             register => Err(Errors::BadRegisterReference(format!(
                 "Register {register} doesn't exist!"
             ))),
@@ -81,14 +97,14 @@ impl Registers {
     }
 }
 
-impl<T> Index<Registers> for [T; Registers::Rcount as usize] {
+impl<T> Index<Registers> for [T; Registers::InstRet as usize] {
     type Output = T;
     fn index(&self, index: Registers) -> &Self::Output {
         &self[index as usize]
     }
 }
 
-impl<T> IndexMut<Registers> for [T; Registers::Rcount as usize] {
+impl<T> IndexMut<Registers> for [T; Registers::InstRet as usize] {
     fn index_mut(&mut self, index: Registers) -> &mut Self::Output {
         &mut self[index as usize]
     }
@@ -119,8 +135,9 @@ enum Operations {
     Trap, // Execute trap
 }
 
-impl Operations {
-    fn from(value: u16) -> Result<Operations, Errors> {
+impl TryFrom<u16> for Operations {
+    type Error = Errors;
+    fn try_from(value: u16) -> Result<Operations, Self::Error> {
         match value {
             0 => Ok(Operations::Br),
             1 => Ok(Operations::Add),
@@ -148,8 +165,21 @@ impl Operations {
 
 struct State {
     memory: [u16; MEM_MAX],
-    registers: [u16; Registers::Rcount as usize],
+    registers: [u16; Registers::InstRet as usize],
     running: bool,
+}
+
+impl State {
+    pub fn default() -> State {
+        let mut state = State {
+            memory: [0_u16; MEM_MAX],
+            registers: [0_u16; Registers::InstRet as usize],
+            running: true,
+        };
+        state.registers[Registers::Pc] = PC_START;
+        state.registers[Registers::Flags] = Flags::Zro as u16;
+        state
+    }
 }
 
 fn disable_input_buffering(termio: &mut Termios) -> Result<(), Errors> {
@@ -168,44 +198,50 @@ fn restore_input_buffering(termio: &mut Termios) -> Result<(), Errors> {
     }
 }
 
-fn run_loop(state: &mut State) {
+fn run_loop(state: &mut State) -> Result<(), Errors> {
     while state.running {
         // Get next instruction from memory, increment the PC by one and get the OP_CODE
-        let instruction = memory_read(state.registers[Registers::Rpc] as usize, state);
-        state.registers[Registers::Rpc] += 1;
-        let op_code = instruction >> 12;
-        let operation_code = error_handler(Operations::from(op_code));
-        match operation_code {
-            Operations::Br => conditional_branch(instruction, state),
-            Operations::Add => error_handler(add(instruction, state)),
-            Operations::Ld => error_handler(load(instruction, state)),
-            Operations::St => error_handler(store(instruction, state)),
-            Operations::Jsr => error_handler(jump_to_subrutine(instruction, state)),
-            Operations::And => error_handler(and(instruction, state)),
-            Operations::Ldr => error_handler(load_register(instruction, state)),
-            Operations::Str => error_handler(store_register(instruction, state)),
-            Operations::Rti => {
-                print!(
-                    "Error: Invalid OPCode:  RTI = {:#x} is not defined",
-                    Operations::Rti as u16
-                );
-                std::process::exit(1);
-            }
-            Operations::Not => error_handler(not(instruction, state)),
-            Operations::Ldi => error_handler(load_indirect(instruction, state)),
-            Operations::Sti => error_handler(store_indirect(instruction, state)),
-            Operations::Jmp => error_handler(jump(instruction, state)),
-            Operations::Res => {
-                print!(
-                    "Error: Invalid OPCode:  RES = {:#x} is not defined",
-                    Operations::Res as u16
-                );
-                std::process::exit(1);
-            }
-            Operations::Lea => error_handler(load_effective_address(instruction, state)),
-            Operations::Trap => error_handler(trap(instruction, state)),
-        }
+        let instruction = memory_read(state.registers[Registers::Pc] as usize, state);
+        state.registers[Registers::Pc] += 1;
+        run_step(instruction, state)?;
     }
+    Ok(())
+}
+
+fn run_step(instruction: u16, state: &mut State) -> Result<(), Errors> {
+    let op_code = instruction >> 12;
+    let operation_code = Operations::try_from(op_code).unwrap(); // Since op_code is an u16 that was right shifted 12 bits, its maximum value is 15 (1111) that will always map in the try_from, so it will never fail, that's why the unwrap is used
+    match operation_code {
+        Operations::Br => conditional_branch(instruction, state),
+        Operations::Add => add(instruction, state)?,
+        Operations::Ld => load(instruction, state)?,
+        Operations::St => store(instruction, state)?,
+        Operations::Jsr => jump_to_subrutine(instruction, state)?,
+        Operations::And => and(instruction, state)?,
+        Operations::Ldr => load_register(instruction, state)?,
+        Operations::Str => store_register(instruction, state)?,
+        Operations::Rti => {
+            print!(
+                "Error: Invalid OPCode:  RTI = {:#x} is not defined",
+                Operations::Rti as u16
+            );
+            std::process::exit(1);
+        }
+        Operations::Not => not(instruction, state)?,
+        Operations::Ldi => load_indirect(instruction, state)?,
+        Operations::Sti => store_indirect(instruction, state)?,
+        Operations::Jmp => jump(instruction, state)?,
+        Operations::Res => {
+            print!(
+                "Error: Invalid OPCode:  RES = {:#x} is not defined",
+                Operations::Res as u16
+            );
+            std::process::exit(1);
+        }
+        Operations::Lea => load_effective_address(instruction, state)?,
+        Operations::Trap => trap(instruction, state)?,
+    }
+    Ok(())
 }
 
 pub fn check_key() -> Result<u16, &'static str> {
@@ -218,64 +254,53 @@ pub fn check_key() -> Result<u16, &'static str> {
         Err(_) => Err("Failed to read the value"),
     }
 }
-
-fn error_handler<T>(result: Result<T, Errors>) -> T {
+// This function is
+fn error_handler<T>(result: Result<T, Errors>) -> bool {
     match result {
-        Ok(x) => return x,
-        Err(Errors::BadFile(s)) => print!("Error {}", s),
-        Err(Errors::DisableInputBuffering) => print!("Error couldn't disable input buffering"),
-        Err(Errors::RestoreInputBuffering) => print!("Error couldn't restore input buffering"),
-        Err(Errors::BadRegisterReference(s)) => print!("Error bad register reference: {}", s),
-        Err(Errors::BadOpCode(s)) => print!("Error bad op code: {}", s),
-        Err(Errors::Trap(t)) => print!("Error failed to excecute trap {}", trap_to_string(t)),
-        Err(Errors::BadTrapCode(s)) => print!("Error bad trap code {}", s),
-        Err(Errors::FewArguments) => print!("Error no arguments were provided!"),
-        Err(Errors::BadTermios) => print!("Error failed to load termios!"),
-    };
-    std::process::exit(0);
-}
-
-fn trap_to_string(t: Traps) -> String {
-    match t {
-        Traps::Getc => String::from("Get character"),
-        Traps::Out => String::from("Output a character"),
-        Traps::Puts => String::from("Output a null terminating string"),
-        Traps::In => String::from("Prompt text and input a character"),
-        Traps::Putsp => String::from("Output a string"),
-        Traps::Halt => String::from("Halt"),
+        Ok(_) => true,
+        Err(e) => {
+            print!("{}", e);
+            false
+        }
     }
 }
 
 fn main() {
     let mut termio = match Termios::from_fd(io::stdin().as_raw_fd()) {
         Ok(x) => x,
-        Err(_) => error_handler(Err(Errors::BadTermios)),
+        Err(_) => {
+            let _ = error_handler::<()>(Err(Errors::BadTermios));
+            std::process::exit(0);
+        }
     };
     let _ = ctrlc::set_handler(move || {
-        error_handler(restore_input_buffering(&mut termio));
+        let _ = error_handler(restore_input_buffering(&mut termio));
         std::process::exit(0);
     });
-    error_handler(disable_input_buffering(&mut termio));
-    // Initialize empty memory and array with registers
-    let mut state = State {
-        memory: [0_u16; MEM_MAX],
-        registers: [0_u16; Registers::Rcount as usize],
-        running: true,
+    if !error_handler(disable_input_buffering(&mut termio)) {
+        std::process::exit(0);
     };
+    // Initialize default state
+    let mut state = State::default();
     // Read file
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        error_handler::<()>(Result::Err(Errors::FewArguments));
+        let _ = error_handler::<()>(Result::Err(Errors::FewArguments));
+        std::process::exit(0);
     }
     let paths = &args[1..].to_vec();
     for p in paths {
-        error_handler(file_management::read_file_to_memory(p, &mut state.memory));
+        if !error_handler(file_management::read_file_to_memory(p, &mut state.memory)) {
+            std::process::exit(0);
+        };
     }
-    // Update the Program counter and flags, and run the program
-    state.registers[Registers::Rpc] = PC_START;
-    state.registers[Registers::Rcond] = Flags::Zro as u16;
-    run_loop(&mut state);
-    error_handler(restore_input_buffering(&mut termio));
+    // Run the program
+    let er1 = error_handler(run_loop(&mut state));
+    let er2 = error_handler(restore_input_buffering(&mut termio));
+    // Exit if either the run_loop or the restore_input_buffering failed
+    if !(er1 && er2) {
+        std::process::exit(0);
+    }
 }
 
 #[cfg(test)]
@@ -284,17 +309,17 @@ mod test {
     use crate::{memory_management::memory_write, *};
 
     #[test]
-    fn integration_test() {
+    fn loop_test() {
         let mut state = State {
             memory: [0_u16; MEM_MAX],
-            registers: [0_u16; Registers::Rcount as usize],
+            registers: [0_u16; Registers::InstRet as usize],
             running: true,
         };
         memory_write(50, 25689, &mut state);
         memory_write(25689, 25, &mut state);
         memory_write(56, 777, &mut state);
         memory_write(9, 50, &mut state);
-        state.registers[Registers::Rpc] = 10;
+        state.registers[Registers::Pc] = 10;
         memory_write(10, 0xAA27, &mut state); // Load indirect 25 to R5
         memory_write(11, 0x27FD, &mut state); // Load 50 to R3
         memory_write(12, 0x12C5, &mut state); // Add R3 + R5 into R1
@@ -308,10 +333,10 @@ mod test {
         memory_write(778, 0x3E03, &mut state); // Save R7 into 782
         memory_write(779, 0x7A40, &mut state); // Save R5 into 777
         memory_write(780, 0xF025, &mut state); // Halt
-        run_loop(&mut state);
+        let _ = run_loop(&mut state);
         assert_eq!(memory_read(0, &mut state), 777);
         assert_eq!(memory_read(782, &mut state), 27);
         assert_eq!(memory_read(777, &mut state), 25);
-        assert_eq!(state.registers[Registers::Rr7], 27);
+        assert_eq!(state.registers[Registers::R7], 27);
     }
 }

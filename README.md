@@ -11,6 +11,7 @@ termios = "0.3.3"
 
 timeout-readwrite = "0.4.0"
 
+thiserror = "2.0.12"
 
 # How to use
 
