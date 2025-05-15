@@ -18,13 +18,18 @@ pub(crate) fn add(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let mode = (instruction >> 5) & 0x1;
     if mode == 1 {
         let value_to_add = sign_extend((instruction) & 0x1F, 5);
-        state.registers[destination_register] =
-            u16::wrapping_add(state.registers[source_register_1], value_to_add);
+        state.register_write(
+            destination_register,
+            u16::wrapping_add(state.register_read(source_register_1), value_to_add),
+        );
     } else {
         let source_register_2 = Registers::try_from(instruction & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
-        state.registers[destination_register] = u16::wrapping_add(
-            state.registers[source_register_1],
-            state.registers[source_register_2],
+        state.register_write(
+            destination_register,
+            u16::wrapping_add(
+                state.register_read(source_register_1),
+                state.register_read(source_register_2),
+            ),
         );
     }
     update_flags(destination_register, &mut state.registers);
@@ -37,9 +42,10 @@ pub(crate) fn add(instruction: u16, state: &mut State) -> Result<(), Errors> {
 pub(crate) fn load_indirect(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let destination_register = Registers::try_from((instruction >> 9) & 0x7).unwrap(); // Take the 3 DR bits, Can't break because its maximum value is 8 (111)
     let pc_offset = sign_extend(instruction & 0x1FF, 9); // Take the 9 PCOffset bits and sign_extend them
-    let memory_index = u16::wrapping_add(state.registers[Registers::Pc], pc_offset) as usize;
+    let memory_index = u16::wrapping_add(state.register_read(Registers::Pc), pc_offset) as usize;
     let actual_index = state.memory_read(memory_index as usize) as usize;
-    state.registers[destination_register] = state.memory_read(actual_index);
+    let value = state.memory_read(actual_index);
+    state.register_write(destination_register, value);
     update_flags(destination_register, &mut state.registers);
     Ok(())
 }
@@ -56,9 +62,10 @@ pub(crate) fn and(instruction: u16, state: &mut State) -> Result<(), Errors> {
         sign_extend((instruction) & 0x1F, 5)
     } else {
         let source_register_2 = Registers::try_from(instruction & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
-        state.registers[source_register_2]
+        state.register_read(source_register_2)
     };
-    state.registers[destination_register] = state.registers[source_register_1] & value_to_and;
+    let value = state.register_read(source_register_1) & value_to_and;
+    state.register_write(destination_register, value);
     update_flags(destination_register, &mut state.registers);
     Ok(())
 }
@@ -76,14 +83,16 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
     let negative_indicator = (instruction >> 11) & 1;
     let zero_indicator = (instruction >> 10) & 1;
     let positive_indicator = (instruction >> 9) & 1;
-    let current_flags = state.registers[Registers::Flags];
+    let current_flags = state.register_read(Registers::Flags);
     let is_negative = (negative_indicator & current_flags >> 2) == 1;
     let is_zero = (zero_indicator & current_flags >> 1) == 1;
     let is_positive = (positive_indicator & current_flags) == 1;
     if is_negative || is_zero || is_positive {
         let pc_offset = sign_extend(instruction & 0x1FF, 9);
-        state.registers[Registers::Pc] =
-            u16::wrapping_add(state.registers[Registers::Pc], pc_offset)
+        state.register_write(
+            Registers::Pc,
+            u16::wrapping_add(state.register_read(Registers::Pc), pc_offset),
+        );
     }
 }
 
@@ -91,7 +100,7 @@ pub(crate) fn conditional_branch(instruction: u16, state: &mut State) {
 /// * Instruction: |OP_Code (1100)|000| BaseR (3)|000000|
 pub(crate) fn jump(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let base_register = Registers::try_from((instruction >> 6) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
-    state.registers[Registers::Pc] = state.registers[base_register];
+    state.register_write(Registers::Pc, state.register_read(base_register));
     Ok(())
 }
 
@@ -100,14 +109,17 @@ pub(crate) fn jump(instruction: u16, state: &mut State) -> Result<(), Errors> {
 /// * Immediate mode (JSR):    |OP_Code (0100)|1 (Mode)|PCOffset (11)|
 /// * Register mode (JSRR):    |OP_Code (0100)|0 (Mode)|00|BaseR (3)|000000|
 pub(crate) fn jump_to_subrutine(instruction: u16, state: &mut State) -> Result<(), Errors> {
-    state.registers[Registers::R7] = state.registers[Registers::Pc];
+    state.register_write(Registers::R7, state.register_read(Registers::Pc));
     let mode = (instruction >> 11) & 1;
     if mode == 1 {
         let offset = sign_extend(instruction & 0x7FF, 11);
-        state.registers[Registers::Pc] = u16::wrapping_add(state.registers[Registers::Pc], offset);
+        state.register_write(
+            Registers::Pc,
+            u16::wrapping_add(state.register_read(Registers::Pc), offset),
+        );
     } else {
         let base_register = Registers::try_from((instruction >> 6) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
-        state.registers[Registers::Pc] = state.registers[base_register];
+        state.register_write(Registers::Pc, state.register_read(base_register));
     }
     Ok(())
 }
@@ -119,8 +131,9 @@ pub(crate) fn load(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
     let destination_register = Registers::try_from((instruction >> 9) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let memory_index =
-        u16::wrapping_add(state.registers[Registers::Pc], sign_extended_offset) as usize;
-    state.registers[destination_register] = state.memory_read(memory_index);
+        u16::wrapping_add(state.register_read(Registers::Pc), sign_extended_offset) as usize;
+    let value = state.memory_read(memory_index);
+    state.register_write(destination_register, value);
     update_flags(destination_register, &mut state.registers);
     Ok(())
 }
@@ -134,8 +147,9 @@ pub(crate) fn load_register(instruction: u16, state: &mut State) -> Result<(), E
     let base_register = Registers::try_from(instruction >> 6 & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let destination_register = Registers::try_from(instruction >> 9 & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let memory_index =
-        u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
-    state.registers[destination_register] = state.memory_read(memory_index);
+        u16::wrapping_add(state.register_read(base_register), sign_extended_offset) as usize;
+    let value = state.memory_read(memory_index);
+    state.register_write(destination_register, value);
     update_flags(destination_register, &mut state.registers);
     Ok(())
 }
@@ -146,8 +160,8 @@ pub(crate) fn load_register(instruction: u16, state: &mut State) -> Result<(), E
 pub(crate) fn load_effective_address(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
     let destination_register = Registers::try_from((instruction >> 9) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
-    let address = u16::wrapping_add(state.registers[Registers::Pc], sign_extended_offset);
-    state.registers[destination_register] = address;
+    let address = u16::wrapping_add(state.register_read(Registers::Pc), sign_extended_offset);
+    state.register_write(destination_register, address);
     update_flags(destination_register, &mut state.registers);
     Ok(())
 }
@@ -158,7 +172,10 @@ pub(crate) fn load_effective_address(instruction: u16, state: &mut State) -> Res
 pub(crate) fn not(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let source_registry = Registers::try_from((instruction >> 6) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let destination_registry = Registers::try_from((instruction >> 9) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
-    state.registers[destination_registry] = !(state.registers[source_registry]);
+    state.register_write(
+        destination_registry,
+        !(state.register_read(source_registry)),
+    );
     update_flags(destination_registry, &mut state.registers);
     Ok(())
 }
@@ -169,8 +186,8 @@ pub(crate) fn store(instruction: u16, state: &mut State) -> Result<(), Errors> {
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
     let source_register = Registers::try_from((instruction >> 9) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let memory_address =
-        u16::wrapping_add(state.registers[Registers::Pc], sign_extended_offset) as usize;
-    state.memory_write(memory_address, state.registers[source_register]);
+        u16::wrapping_add(state.register_read(Registers::Pc), sign_extended_offset) as usize;
+    state.memory_write(memory_address, state.register_read(source_register));
     Ok(())
 }
 
@@ -180,9 +197,9 @@ pub(crate) fn store_indirect(instruction: u16, state: &mut State) -> Result<(), 
     let sign_extended_offset = sign_extend(instruction & 0x1FF, 9);
     let source_register = Registers::try_from((instruction >> 9) & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let memory_address =
-        u16::wrapping_add(state.registers[Registers::Pc], sign_extended_offset) as usize;
+        u16::wrapping_add(state.register_read(Registers::Pc), sign_extended_offset) as usize;
     let actual_address = state.memory_read(memory_address) as usize;
-    state.memory_write(actual_address, state.registers[source_register]);
+    state.memory_write(actual_address, state.register_read(source_register));
     Ok(())
 }
 /// Store the register in memory, the address is calculated using the base register's content and a sign extended offset
@@ -192,8 +209,8 @@ pub(crate) fn store_register(instruction: u16, state: &mut State) -> Result<(), 
     let base_register = Registers::try_from(instruction >> 6 & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let source_register = Registers::try_from(instruction >> 9 & 0x7).unwrap(); // Can't break because its maximum value is 8 (111)
     let memory_address =
-        u16::wrapping_add(state.registers[base_register], sign_extended_offset) as usize;
-    state.memory_write(memory_address, state.registers[source_register]);
+        u16::wrapping_add(state.register_read(base_register), sign_extended_offset) as usize;
+    state.memory_write(memory_address, state.register_read(source_register));
     Ok(())
 }
 
@@ -222,7 +239,7 @@ fn trap_routine_halt(state: &mut State) {
 /// read the value in that memory position, if its different from 0x0 then print the less significant byte first
 /// and if the more significant byte is different from 0x0 print it. It continues reading from the next memory position until it finds a 0x0
 fn trap_routine_putsp(state: &mut State) {
-    let mut address = state.registers[Registers::R0] as usize;
+    let mut address = state.register_read(Registers::R0) as usize;
     let mut character = state.memory_read(address);
     while character != NULL_WORD {
         if let Some(char1) = char::from_u32((character & 0xFF) as u32) {
@@ -251,14 +268,14 @@ fn trap_routine_in(state: &mut State) -> Result<(), Errors> {
         Ok(_) => print!("{}", input),
         Err(_) => return Err(Errors::Trap(Traps::In)),
     };
-    state.registers[Registers::R0] = input as u16;
+    state.register_write(Registers::R0, input as u16);
     update_flags(Registers::R0, &mut state.registers);
     Ok(())
 }
 
 /// Reads a character from register 0 and prints it
 fn trap_routine_out(state: &State) -> Result<(), Errors> {
-    let character = state.registers[Registers::R0];
+    let character = state.register_read(Registers::R0);
     if let Some(char) = char::from_u32(character as u32) {
         print!("{}", char);
     } else {
@@ -271,7 +288,7 @@ fn trap_routine_out(state: &State) -> Result<(), Errors> {
 fn trap_routine_getc(state: &mut State) -> Result<(), Errors> {
     let mut input = [0u8];
     match stdin().read_exact(&mut input) {
-        Ok(_) => state.registers[Registers::R0] = input[0] as u16, // Is this ok?
+        Ok(_) => state.register_write(Registers::R0, input[0] as u16),
         Err(_) => return Err(Errors::Trap(Traps::Getc)),
     };
     update_flags(Registers::R0, &mut state.registers);
@@ -282,7 +299,7 @@ fn trap_routine_getc(state: &mut State) -> Result<(), Errors> {
 /// Each memory position will represent one char, start reading memory at the address in the register R0, print the read character
 /// and continue reading the next memory position
 fn trap_routine_puts(state: &mut State) {
-    let mut address = state.registers[Registers::R0] as usize;
+    let mut address = state.register_read(Registers::R0) as usize;
     let mut character = state.memory_read(address);
     while character != NULL_WORD {
         if let Some(char_char) = char::from_u32(character as u32) {
