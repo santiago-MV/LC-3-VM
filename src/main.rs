@@ -1,4 +1,5 @@
 use operations::*;
+use std::fmt::Debug;
 use std::io::{Read, stdin};
 use std::ops::{Index, IndexMut};
 use std::time::Duration;
@@ -263,24 +264,12 @@ fn run_step(instruction: u16, state: &mut State) -> Result<(), Errors> {
         Operations::And => and(instruction, state)?,
         Operations::Ldr => load_register(instruction, state)?,
         Operations::Str => store_register(instruction, state)?,
-        Operations::Rti => {
-            print!(
-                "Error: Invalid OPCode:  RTI = {:#x} is not defined",
-                Operations::Rti as u16
-            );
-            std::process::exit(1);
-        }
+        Operations::Rti => return Err(Errors::BadOpCode(Operations::Rti as u16)),
         Operations::Not => not(instruction, state)?,
         Operations::Ldi => load_indirect(instruction, state)?,
         Operations::Sti => store_indirect(instruction, state)?,
         Operations::Jmp => jump(instruction, state)?,
-        Operations::Res => {
-            print!(
-                "Error: Invalid OPCode:  RES = {:#x} is not defined",
-                Operations::Res as u16
-            );
-            std::process::exit(1);
-        }
+        Operations::Res => return Err(Errors::BadOpCode(Operations::Res as u16)),
         Operations::Lea => load_effective_address(instruction, state)?,
         Operations::Trap => trap(instruction, state)?,
     }
@@ -309,13 +298,10 @@ fn main() {
 }
 
 fn vm() -> Result<(), Errors> {
-    let mut termio = match Termios::from_fd(io::stdin().as_raw_fd()) {
-        Ok(x) => x,
-        Err(_) => return Err(Errors::BadTermios),
-    };
+    let mut termio = Termios::from_fd(io::stdin().as_raw_fd()).map_err(|_| Errors::BadTermios)?;
     let _ = ctrlc::set_handler(move || {
         let _ = restore_input_buffering(&mut termio);
-        std::process::exit(0);
+        std::process::exit(1);
     });
     disable_input_buffering(&mut termio)?;
     // Initialize default state
