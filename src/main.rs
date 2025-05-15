@@ -297,53 +297,42 @@ pub fn check_key() -> Result<u16, &'static str> {
         Err(_) => Err("Failed to read the value"),
     }
 }
-// This function is responsible of printing the error message and return whether it failed or not
-fn error_handler<T>(result: Result<T, Errors>) -> bool {
-    match result {
-        Ok(_) => true,
+
+fn main() {
+    match vm() {
+        Ok(_) => {}
         Err(e) => {
-            print!("{}", e);
-            false
+            println!("{}", e);
+            std::process::exit(1)
         }
     }
 }
 
-fn main() {
+fn vm() -> Result<(), Errors> {
     let mut termio = match Termios::from_fd(io::stdin().as_raw_fd()) {
         Ok(x) => x,
-        Err(_) => {
-            let _ = error_handler::<()>(Err(Errors::BadTermios));
-            std::process::exit(0);
-        }
+        Err(_) => return Err(Errors::BadTermios),
     };
     let _ = ctrlc::set_handler(move || {
-        let _ = error_handler(restore_input_buffering(&mut termio));
+        let _ = restore_input_buffering(&mut termio);
         std::process::exit(0);
     });
-    if !error_handler(disable_input_buffering(&mut termio)) {
-        std::process::exit(0);
-    };
+    disable_input_buffering(&mut termio)?;
     // Initialize default state
     let mut state = State::default();
     // Read file
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        let _ = error_handler::<()>(Result::Err(Errors::FewArguments));
-        std::process::exit(0);
+        return Err(Errors::FewArguments);
     }
     let paths = &args[1..].to_vec();
     for p in paths {
-        if !error_handler(file_management::read_file_to_memory(p, &mut state)) {
-            std::process::exit(0);
-        };
+        file_management::read_file_to_memory(p, &mut state)?;
     }
     // Run the program
-    let er1 = error_handler(run_loop(&mut state));
-    let er2 = error_handler(restore_input_buffering(&mut termio));
-    // Exit if either the run_loop or the restore_input_buffering failed
-    if !(er1 && er2) {
-        std::process::exit(0);
-    }
+    run_loop(&mut state)?;
+    restore_input_buffering(&mut termio)?;
+    Ok(())
 }
 
 #[cfg(test)]
